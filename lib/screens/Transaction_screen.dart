@@ -1,22 +1,35 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart'; // For date formatting
-import 'package:fl_chart/fl_chart.dart'; // For fl_chart
+import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../config/app_constants.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart';
 
-class TransactionScreen extends StatefulWidget {
-  static const String screenRoute = 'transaction_screen';
-  final String carWashId; // Required parameter
+class EnhancedTransactionScreen extends StatefulWidget {
+  static const String screenRoute = 'enhanced_transaction_screen';
+  final String carWashId;
 
-  const TransactionScreen({super.key, required this.carWashId});
+  const EnhancedTransactionScreen({super.key, required this.carWashId});
 
   @override
-  _TransactionScreenState createState() => _TransactionScreenState();
+  _EnhancedTransactionScreenState createState() =>
+      _EnhancedTransactionScreenState();
 }
 
-class _TransactionScreenState extends State<TransactionScreen> {
-  List<Map<String, dynamic>> transactions = [];
+class _EnhancedTransactionScreenState extends State<EnhancedTransactionScreen> {
+  List<Reservation> reservations = [];
+  List<Reservation> filteredReservations = [];
+
+  DateTime? selectedDate;
+  String searchQuery = '';
+  String selectedStatus = 'الكل';
+  String sortBy = 'date'; // date, price, status
+  bool isAscending = false;
+
+  bool isLoading = true;
 
   @override
   void initState() {
@@ -24,12 +37,9 @@ class _TransactionScreenState extends State<TransactionScreen> {
     _fetchTransactions();
   }
 
-  List<Reservation> reservations = [];
+  Future<void> _fetchTransactions() async {
+    setState(() => isLoading = true);
 
-  DateTime? selectedDate;
-  String searchQuery = '';
-
-  _fetchTransactions() async {
     try {
       final response = await http.post(
         Uri.parse('http://10.0.2.2/myapp/api/Transaction.php'),
@@ -37,187 +47,558 @@ class _TransactionScreenState extends State<TransactionScreen> {
       );
 
       if (response.statusCode == 200) {
-        try {
-          final data = json.decode(response.body);
+        final data = json.decode(response.body);
 
-          if (data['success'] == true) {
-            setState(() {
-              reservations = (data['reservations'] as List<dynamic>)
-                  .map((item) => Reservation(
-                        customerName: item['user_name'],
-                        phone: item['user_phone'],
-                        carMake: item['car_make'],
-                        carModel: item['car_model'],
-                        plateNumber: item['car_plate_number'],
-                        service: item['service_name'],
-                        date: DateTime.parse(item['date']),
-                        time: item['time'],
-                        price: double.tryParse(item['service_price']) ?? 0.0,
-                        status: item['status'],
-                      ))
-                  .toList();
-            });
-          } else {
-            print('Error: ${data['message']}');
-          }
-        } catch (e) {
-          print('Error parsing response: $e');
-          print(
-              'Raw response: ${response.body}'); // Log raw response for debugging
+        if (data['success'] == true) {
+          setState(() {
+            reservations = (data['reservations'] as List<dynamic>)
+                .map((item) => Reservation(
+                      customerName: item['user_name'],
+                      phone: item['user_phone'],
+                      carMake: item['car_make'],
+                      carModel: item['car_model'],
+                      plateNumber: item['car_plate_number'],
+                      service: item['service_name'],
+                      date: DateTime.parse(item['date']),
+                      time: item['time'],
+                      price: double.tryParse(item['service_price']) ?? 0.0,
+                      status: item['status'],
+                    ))
+                .toList();
+            _applyFilters();
+            isLoading = false;
+          });
         }
-      } else {
-        print(
-            'Failed to load transactions. Status code: ${response.statusCode}');
       }
     } catch (e) {
+      setState(() => isLoading = false);
       print('Error fetching transactions: $e');
     }
   }
 
+  void _applyFilters() {
+    setState(() {
+      filteredReservations = reservations.where((res) {
+        // تصفية حسب التاريخ
+        bool matchesDate = selectedDate == null ||
+            (res.date.year == selectedDate!.year &&
+                res.date.month == selectedDate!.month &&
+                res.date.day == selectedDate!.day);
+
+        // تصفية حسب البحث
+        bool matchesSearch = searchQuery.isEmpty ||
+            res.customerName
+                .toLowerCase()
+                .contains(searchQuery.toLowerCase()) ||
+            res.service.toLowerCase().contains(searchQuery.toLowerCase());
+
+        // تصفية حسب الحالة
+        bool matchesStatus =
+            selectedStatus == 'الكل' || res.status == selectedStatus;
+
+        return matchesDate && matchesSearch && matchesStatus;
+      }).toList();
+
+      // ترتيب النتائج
+      _sortReservations();
+    });
+  }
+
+  void _sortReservations() {
+    filteredReservations.sort((a, b) {
+      int comparison = 0;
+      switch (sortBy) {
+        case 'date':
+          comparison = a.date.compareTo(b.date);
+          break;
+        case 'price':
+          comparison = (a.price ?? 0.0).compareTo(b.price ?? 0.0);
+          break;
+        case 'status':
+          comparison = a.status.compareTo(b.status);
+          break;
+      }
+      return isAscending ? comparison : -comparison;
+    });
+  }
+
+  Future<void> _exportToPDF() async {
+    final pdf = pw.Document();
+
+    pdf.addPage(
+      pw.Page(
+        build: (pw.Context context) {
+          return pw.Column(
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              pw.Text('تقرير المعاملات',
+                  style: pw.TextStyle(
+                      fontSize: 24, fontWeight: pw.FontWeight.bold)),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                  'التاريخ: ${DateFormat('yyyy-MM-dd').format(DateTime.now())}'),
+              pw.Text('إجمالي المعاملات: ${filteredReservations.length}'),
+              pw.SizedBox(height: 20),
+              pw.Table.fromTextArray(
+                headers: ['العميل', 'الخدمة', 'التاريخ', 'السعر', 'الحالة'],
+                data: filteredReservations
+                    .take(50)
+                    .map((res) => [
+                          res.customerName,
+                          res.service,
+                          DateFormat('yyyy-MM-dd').format(res.date),
+                          '${res.price?.toStringAsFixed(2)} ر.س',
+                          res.status,
+                        ])
+                    .toList(),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    await Printing.layoutPdf(
+      onLayout: (PdfPageFormat format) async => pdf.save(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Calculate total earnings
-    double totalEarnings = reservations
-        .where((res) => res.status == 'Completed')
-        .fold(0.0, (sum, res) => sum + (res.price ?? 0.0));
-
-    // Calculate total reservations
-    int totalReservations = reservations.length;
-
-    // Filter reservations by selected date and search query
-    List<Reservation> filteredReservations = reservations
-        .where((res) =>
-            (selectedDate == null || res.date.day == selectedDate!.day) &&
-            (res.customerName
-                    .toLowerCase()
-                    .contains(searchQuery.toLowerCase()) ||
-                res.service.toLowerCase().contains(searchQuery.toLowerCase())))
-        .toList();
+    final stats = _calculateStatistics();
 
     return Scaffold(
+      backgroundColor: Colors.grey.shade50,
       appBar: AppBar(
         automaticallyImplyLeading: false,
-        title: const Text('المعاملات والإحصائيات'),
+        title: const Text('إدارة المعاملات المتقدمة'),
         backgroundColor: AppColors.background,
-        elevation: 1,
-        centerTitle: true,
+        elevation: 0,
         actions: [
           IconButton(
-            icon: const Icon(Icons.calendar_today),
-            onPressed: () => _selectDate(context),
+            icon: const Icon(Icons.file_download),
+            onPressed: _exportToPDF,
+            tooltip: 'تصدير PDF',
           ),
-          IconButton(
-            icon: const Icon(Icons.bar_chart),
-            onPressed: () => _showGraphDialog(),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.sort),
+            onSelected: (value) {
+              setState(() {
+                if (sortBy == value) {
+                  isAscending = !isAscending;
+                } else {
+                  sortBy = value;
+                  isAscending = true;
+                }
+                _applyFilters();
+              });
+            },
+            itemBuilder: (context) => [
+              const PopupMenuItem(
+                  value: 'date', child: Text('ترتيب حسب التاريخ')),
+              const PopupMenuItem(
+                  value: 'price', child: Text('ترتيب حسب السعر')),
+              const PopupMenuItem(
+                  value: 'status', child: Text('ترتيب حسب الحالة')),
+            ],
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Statistics Panel
-            _buildStatisticsPanel(totalEarnings, totalReservations),
-            const SizedBox(height: 20),
-            // Search Bar
-            _buildSearchBar(),
-            const SizedBox(height: 20),
-            // Filter and Search Panel
-            _buildFilterPanel(),
-            const SizedBox(height: 20),
-            // Reservations List
-            Expanded(
-              child: filteredReservations.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.receipt_long,
-                            size: 80,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: AppSpacing.medium),
-                          Text(
-                            'لا توجد حجوزات',
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[600],
+      body: isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: _fetchTransactions,
+              child: CustomScrollView(
+                slivers: [
+                  // بطاقات الإحصائيات
+                  SliverToBoxAdapter(
+                    child: _buildStatisticsSection(stats),
+                  ),
+
+                  // الفلاتر
+                  SliverToBoxAdapter(
+                    child: _buildFiltersSection(),
+                  ),
+
+                  // رسم بياني مصغر
+                  SliverToBoxAdapter(
+                    child: _buildMiniChart(),
+                  ),
+
+                  // قائمة المعاملات
+                  filteredReservations.isEmpty
+                      ? SliverFillRemaining(
+                          child: Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.receipt_long,
+                                    size: 80, color: Colors.grey.shade300),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'لا توجد معاملات',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ],
-                      ),
-                    )
-                  : ListView.builder(
-                      itemCount: filteredReservations.length,
-                      itemBuilder: (context, index) {
-                        Reservation reservation = filteredReservations[index];
-                        return _buildReservationCard(reservation);
-                      },
-                    ),
+                        )
+                      : SliverPadding(
+                          padding: const EdgeInsets.all(16),
+                          sliver: SliverList(
+                            delegate: SliverChildBuilderDelegate(
+                              (context, index) {
+                                return _buildReservationCard(
+                                    filteredReservations[index]);
+                              },
+                              childCount: filteredReservations.length,
+                            ),
+                          ),
+                        ),
+                ],
+              ),
             ),
-          ],
-        ),
+    );
+  }
+
+  Widget _buildStatisticsSection(Map<String, dynamic> stats) {
+    return Container(
+      margin: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'ملخص الأداء',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          GridView.count(
+            crossAxisCount: 2,
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisSpacing: 12,
+            mainAxisSpacing: 12,
+            childAspectRatio: 1.5,
+            children: [
+              _buildStatCard(
+                'إجمالي الأرباح',
+                '${stats['totalRevenue'].toStringAsFixed(2)} ر.س',
+                Icons.attach_money,
+                Colors.green,
+                '↑ ${stats['revenueChange']}%',
+              ),
+              _buildStatCard(
+                'الحجوزات',
+                '${stats['totalReservations']}',
+                Icons.event_note,
+                Colors.blue,
+                '${stats['completionRate']}% إنجاز',
+              ),
+              _buildStatCard(
+                'متوسط القيمة',
+                '${stats['averageValue'].toStringAsFixed(2)} ر.س',
+                Icons.trending_up,
+                Colors.purple,
+                'لكل حجز',
+              ),
+              _buildStatCard(
+                'قيد الانتظار',
+                '${stats['pendingCount']}',
+                Icons.pending_actions,
+                Colors.orange,
+                'يحتاج متابعة',
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
 
-  // Function to show the date picker and set the selected date
-  _selectDate(BuildContext context) async {
-    final DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: selectedDate ?? DateTime.now(),
-      firstDate: DateTime.now().subtract(const Duration(days: 365)),
-      lastDate: DateTime.now().add(const Duration(days: 365)),
-    );
-
-    if (picked != null && picked != selectedDate) {
-      setState(() {
-        selectedDate = picked;
-      });
-    }
-  }
-
-  // Function to build statistics panel at the top
-  Widget _buildStatisticsPanel(double totalEarnings, int totalReservations) {
+  Widget _buildStatCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+    String subtitle,
+  ) {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: AppColors.primary,
-        borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black26,
-            blurRadius: 5,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'ملخص المعاملات',
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+            ],
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              Text(
+                subtitle,
+                style: TextStyle(
+                  fontSize: 10,
+                  color: Colors.grey.shade500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFiltersSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'تصفية وبحث',
             style: TextStyle(
-              color: Colors.white,
-              fontSize: 18,
+              fontSize: 16,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 10),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _buildStatCard('إجمالي الأرباح',
-                      '${totalEarnings.toStringAsFixed(2)} ريال'),
-                  const SizedBox(width: 16),
-                  _buildStatCard('إجمالي الحجوزات', '$totalReservations'),
-                  const SizedBox(width: 16),
-                  _buildStatCard('الحجوزات المكتملة',
-                      '${reservations.where((r) => r.status == 'Completed').length}'),
+          const SizedBox(height: 16),
+
+          // شريط البحث
+          TextField(
+            onChanged: (value) {
+              setState(() {
+                searchQuery = value;
+                _applyFilters();
+              });
+            },
+            decoration: InputDecoration(
+              hintText: 'ابحث عن عميل أو خدمة...',
+              prefixIcon: const Icon(Icons.search),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: Colors.grey.shade300),
+              ),
+              filled: true,
+              fillColor: Colors.grey.shade50,
+            ),
+          ),
+          const SizedBox(height: 12),
+
+          // الفلاتر السريعة
+          Row(
+            children: [
+              Expanded(
+                child: _buildFilterChip('الكل'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildFilterChip('Completed'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildFilterChip('Pending'),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _buildFilterChip('Canceled'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
+          // اختيار التاريخ
+          OutlinedButton.icon(
+            onPressed: () async {
+              final picked = await showDatePicker(
+                context: context,
+                initialDate: selectedDate ?? DateTime.now(),
+                firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                lastDate: DateTime.now().add(const Duration(days: 365)),
+              );
+              if (picked != null) {
+                setState(() {
+                  selectedDate = picked;
+                  _applyFilters();
+                });
+              }
+            },
+            icon: const Icon(Icons.calendar_today, size: 18),
+            label: Text(
+              selectedDate == null
+                  ? 'اختر التاريخ'
+                  : DateFormat('yyyy-MM-dd').format(selectedDate!),
+            ),
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(double.infinity, 48),
+            ),
+          ),
+          if (selectedDate != null)
+            TextButton(
+              onPressed: () {
+                setState(() {
+                  selectedDate = null;
+                  _applyFilters();
+                });
+              },
+              child: const Text('إلغاء تصفية التاريخ'),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String status) {
+    final isSelected = selectedStatus == status;
+    return FilterChip(
+      label: Text(
+        _getStatusLabel(status),
+        style: TextStyle(
+          fontSize: 12,
+          color: isSelected ? Colors.white : Colors.black87,
+        ),
+      ),
+      selected: isSelected,
+      onSelected: (selected) {
+        setState(() {
+          selectedStatus = status;
+          _applyFilters();
+        });
+      },
+      selectedColor: AppColors.primary,
+      checkmarkColor: Colors.white,
+    );
+  }
+
+  String _getStatusLabel(String status) {
+    switch (status) {
+      case 'الكل':
+        return 'الكل';
+      case 'Completed':
+        return 'مكتمل';
+      case 'Pending':
+        return 'منتظر';
+      case 'Canceled':
+        return 'ملغي';
+      default:
+        return status;
+    }
+  }
+
+  Widget _buildMiniChart() {
+    if (filteredReservations.isEmpty) return const SizedBox.shrink();
+
+    final dailyRevenue = <String, double>{};
+    for (var res in filteredReservations) {
+      final dateKey = DateFormat('MM/dd').format(res.date);
+      dailyRevenue[dateKey] =
+          (dailyRevenue[dateKey] ?? 0.0) + (res.price ?? 0.0);
+    }
+
+    final spots = dailyRevenue.entries.toList().asMap().entries.map((entry) {
+      return FlSpot(entry.key.toDouble(), entry.value.value);
+    }).toList();
+
+    return Container(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
+      height: 200,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'الإيرادات اليومية',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: LineChart(
+              LineChartData(
+                gridData: const FlGridData(show: false),
+                titlesData: const FlTitlesData(show: false),
+                borderData: FlBorderData(show: false),
+                lineBarsData: [
+                  LineChartBarData(
+                    spots: spots,
+                    isCurved: true,
+                    color: AppColors.primary,
+                    barWidth: 3,
+                    isStrokeCapRound: true,
+                    dotData: const FlDotData(show: false),
+                    belowBarData: BarAreaData(
+                      show: true,
+                      color: AppColors.primary.withOpacity(0.1),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -227,383 +608,287 @@ class _TransactionScreenState extends State<TransactionScreen> {
     );
   }
 
-  // Helper function to build each statistic card
-  Widget _buildStatCard(String label, String value) {
+  Widget _buildReservationCard(Reservation reservation) {
+    final statusColor = _getStatusColor(reservation.status);
+
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.2),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-    );
-  }
-
-  // Function to build reservation card
-  Widget _buildReservationCard(Reservation reservation) {
-    return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
-      ),
-      elevation: AppSizes.cardElevation,
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Reservation Date and Status
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => _showReservationDetails(reservation),
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Icon(Icons.date_range, color: AppColors.primary),
-                    const SizedBox(width: 8),
-                    Text(
-                      DateFormat('yyyy-MM-dd').format(reservation.date),
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            reservation.customerName,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            reservation.service,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text(
+                        _getStatusLabel(reservation.status),
+                        style: TextStyle(
+                          color: statusColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                     ),
                   ],
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: reservation.status == 'Completed'
-                        ? Colors.green[50]
-                        : Colors.orange[50],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    reservation.status == 'Completed'
-                        ? 'مكتمل'
-                        : 'قيد الانتظار',
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.bold,
-                      color: reservation.status == 'Completed'
-                          ? Colors.green[700]
-                          : Colors.orange[700],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 12),
-
-            // Customer Information
-            _buildInfoRow(Icons.person, 'العميل:', reservation.customerName),
-            const SizedBox(height: 8),
-            _buildInfoRow(Icons.phone, 'الهاتف:', reservation.phone),
-            const SizedBox(height: 8),
-
-            // Car Information
-            _buildInfoRow(
-              Icons.directions_car,
-              'السيارة:',
-              '${reservation.carMake} ${reservation.carModel}',
-            ),
-            const SizedBox(height: 8),
-            _buildInfoRow(
-              Icons.format_list_numbered,
-              'رقم اللوحة:',
-              reservation.plateNumber,
-            ),
-            const SizedBox(height: 8),
-
-            // Service and Time
-            _buildInfoRow(Icons.local_car_wash, 'الخدمة:', reservation.service),
-            const SizedBox(height: 8),
-            _buildInfoRow(Icons.access_time, 'الوقت:', reservation.time),
-            const SizedBox(height: 8),
-
-            // Price
-            _buildInfoRow(
-              Icons.attach_money,
-              'السعر:',
-              '${reservation.price?.toStringAsFixed(2) ?? '0.00'} ريال',
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Row(
-      children: [
-        Icon(icon, color: AppColors.primary, size: 20),
-        const SizedBox(width: 8),
-        Text(
-          label,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontSize: 16),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // Filter panel with date picker and search options - تم إصلاح الأزرار هنا
-  Widget _buildFilterPanel() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        // زر اختيار التاريخ - مُصلح
-        SizedBox(
-          width: 160,
-          child: ElevatedButton.icon(
-            onPressed: () => _selectDate(context),
-            icon: const Icon(Icons.calendar_today, size: 18),
-            label: Text(
-              selectedDate == null
-                  ? 'اختر التاريخ'
-                  : DateFormat('yyyy-MM-dd').format(selectedDate!),
-              style: const TextStyle(fontSize: 14),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-          ),
-        ),
-
-        // زر تصفية الخدمات - مُصلح
-        SizedBox(
-          width: 140,
-          child: ElevatedButton(
-            onPressed: () {
-              _showServiceFilterDialog();
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-            ),
-            child: const Text(
-              'تصفية الخدمات',
-              style: TextStyle(fontSize: 14),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _showServiceFilterDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('تصفية حسب الخدمة'),
-        content: const Text('هذه الخاصية قيد التطوير'),
-        actions: [
-          SizedBox(
-            width: 100,
-            child: OutlinedButton(
-              onPressed: () => Navigator.pop(context),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.grey[700],
-                side: BorderSide(color: Colors.grey[300]!),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-              child: const Text('إلغاء'),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Function to build the search bar
-  Widget _buildSearchBar() {
-    return TextField(
-      onChanged: (value) {
-        setState(() {
-          searchQuery = value;
-        });
-      },
-      decoration: InputDecoration(
-        labelText: 'ابحث في الحجوزات...',
-        hintText: 'أدخل اسم العميل أو الخدمة',
-        prefixIcon: const Icon(Icons.search),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(AppSizes.borderRadius),
-        ),
-        filled: true,
-        fillColor: Colors.grey[100],
-      ),
-    );
-  }
-
-  // Function to show graph dialog using fl_chart
-  _showGraphDialog() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
-          ),
-          child: Container(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'الرسوم البيانية للإيرادات والحجوزات',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  height: 300,
-                  width: double.infinity,
-                  child: _buildChart(),
-                ),
-                const SizedBox(height: 20),
-                // هذا هو الزر المسبب للمشكلة في السطر 338 - تم إصلاحه
-                SizedBox(
-                  width: 120,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Icon(Icons.calendar_today,
+                        size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 8),
+                    Text(
+                      DateFormat('yyyy-MM-dd').format(reservation.date),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
                       ),
                     ),
-                    child: const Text('إغلاق'),
+                    const SizedBox(width: 16),
+                    Icon(Icons.access_time,
+                        size: 16, color: Colors.grey.shade600),
+                    const SizedBox(width: 8),
+                    Text(
+                      reservation.time,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${reservation.price?.toStringAsFixed(2) ?? '0.00'} ر.س',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'Completed':
+        return Colors.green;
+      case 'Pending':
+        return Colors.orange;
+      case 'Canceled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  void _showReservationDetails(Reservation reservation) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.7,
+        minChildSize: 0.5,
+        maxChildSize: 0.95,
+        expand: false,
+        builder: (context, scrollController) => SingleChildScrollView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Handle
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade300,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              const Text(
+                'تفاصيل الحجز',
+                style: TextStyle(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              _buildDetailRow(Icons.person, 'العميل', reservation.customerName),
+              _buildDetailRow(Icons.phone, 'الهاتف', reservation.phone),
+              _buildDetailRow(Icons.directions_car, 'السيارة',
+                  '${reservation.carMake} ${reservation.carModel}'),
+              _buildDetailRow(Icons.format_list_numbered, 'رقم اللوحة',
+                  reservation.plateNumber),
+              _buildDetailRow(Icons.build, 'الخدمة', reservation.service),
+              _buildDetailRow(Icons.calendar_today, 'التاريخ',
+                  DateFormat('yyyy-MM-dd').format(reservation.date)),
+              _buildDetailRow(Icons.access_time, 'الوقت', reservation.time),
+              _buildDetailRow(Icons.attach_money, 'السعر',
+                  '${reservation.price?.toStringAsFixed(2) ?? '0.00'} ر.س'),
+              _buildDetailRow(
+                  Icons.info, 'الحالة', _getStatusLabel(reservation.status),
+                  color: _getStatusColor(reservation.status)),
+
+              const SizedBox(height: 24),
+
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.close),
+                  label: const Text('إغلاق'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDetailRow(IconData icon, String label, String value,
+      {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: (color ?? AppColors.primary).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 20, color: color ?? AppColors.primary),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: color ?? Colors.black87,
                   ),
                 ),
               ],
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 
-  // Function to build the bar chart using fl_chart
-  Widget _buildChart() {
-    if (reservations.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.bar_chart, size: 50, color: Colors.grey[400]),
-            const SizedBox(height: 10),
-            Text(
-              'لا توجد بيانات للعرض',
-              style: TextStyle(color: Colors.grey[600]),
-            ),
-          ],
-        ),
-      );
+  Map<String, dynamic> _calculateStatistics() {
+    double totalRevenue = 0.0;
+    int completedCount = 0;
+    int pendingCount = 0;
+
+    for (var res in filteredReservations) {
+      totalRevenue += res.price ?? 0.0;
+      if (res.status == 'Completed') completedCount++;
+      if (res.status == 'Pending') pendingCount++;
     }
 
-    // Grouping reservations by date for the bar chart
-    Map<DateTime, double> earningsByDate = {};
-    Map<DateTime, int> reservationsByDate = {};
+    final averageValue = filteredReservations.isNotEmpty
+        ? totalRevenue / filteredReservations.length
+        : 0.0;
 
-    for (var reservation in reservations) {
-      var date = DateTime(
-          reservation.date.year, reservation.date.month, reservation.date.day);
-      earningsByDate[date] =
-          (earningsByDate[date] ?? 0.0) + (reservation.price ?? 0.0);
-      reservationsByDate[date] = (reservationsByDate[date] ?? 0) + 1;
-    }
+    final completionRate = filteredReservations.isNotEmpty
+        ? (completedCount / filteredReservations.length * 100)
+            .toStringAsFixed(1)
+        : '0.0';
 
-    // Prepare the data points for the chart
-    List<BarChartGroupData> barGroups = [];
-    List<String> daysOfWeek = [];
-
-    earningsByDate.forEach((date, earnings) {
-      String dayLabel = DateFormat('EEE').format(date);
-      daysOfWeek.add(dayLabel);
-
-      barGroups.add(BarChartGroupData(
-        x: date.millisecondsSinceEpoch,
-        barRods: [
-          BarChartRodData(
-            toY: reservationsByDate[date]!.toDouble(),
-            color: AppColors.primary,
-            width: 16,
-          ),
-        ],
-      ));
-    });
-
-    return BarChart(
-      BarChartData(
-        barGroups: barGroups,
-        titlesData: FlTitlesData(
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                return Text(value % 1 == 0 ? value.toInt().toString() : '');
-              },
-            ),
-          ),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              getTitlesWidget: (value, meta) {
-                int index = value.toInt();
-                if (index >= 0 && index < daysOfWeek.length) {
-                  return Text(daysOfWeek[index]);
-                }
-                return const Text('');
-              },
-            ),
-          ),
-        ),
-        gridData: FlGridData(show: true),
-        borderData: FlBorderData(show: true),
-      ),
-    );
+    return {
+      'totalRevenue': totalRevenue,
+      'totalReservations': filteredReservations.length,
+      'averageValue': averageValue,
+      'pendingCount': pendingCount,
+      'completionRate': completionRate,
+      'revenueChange': '12.5', // يمكن حسابها من البيانات السابقة
+    };
   }
 }
 
-// Reservation class to store reservation data
+// نموذج الحجز
 class Reservation {
   final String customerName;
   final String phone;

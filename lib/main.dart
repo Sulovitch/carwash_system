@@ -1,4 +1,6 @@
-﻿import 'screens/Receptionist_screen.dart';
+﻿import 'package:app/screens/Owner_screen.dart';
+
+import 'screens/Receptionist_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/welcome_screen.dart';
@@ -114,10 +116,7 @@ class MyApp extends StatelessWidget {
         SignupScreen.routeName: (context) => const SignupScreen(),
         ReservationScreen.screenRoute: (context) => const ReservationScreen(),
         CarInputScreen.routeName: (context) => CarInputScreen(userId: ''),
-        ReceptionistScreen.routeName: (context) => ReceptionistScreen(
-              receptionist: const {},
-              carWashInfo: const {},
-            ),
+        OwnerScreen.routeName: (context) => OwnerScreen(carWashInfo: const {}),
         OwnerSubscriptionScreen.routeName: (context) =>
             const OwnerSubscriptionScreen(),
       },
@@ -189,5 +188,3 @@ class MyApp extends StatelessWidget {
     );
   }
 }
-
-

@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'owner/owner_services_tab.dart';
 import 'owner/owner_receptionists_tab.dart';
 import 'owner/owner_profile_tab.dart';
+import 'owner/owner_dashboard_tab.dart';
+import 'owner/owner_analytics_tab.dart';
 import '../config/app_constants.dart';
-import 'Transaction_screen.dart';
 
 class OwnerScreen extends StatefulWidget {
   static const String routeName = 'ownerScreen';
@@ -98,58 +99,70 @@ class _OwnerScreenState extends State<OwnerScreen> {
     }
 
     final tabs = [
-      OwnerProfileTab(
+      OwnerDashboardTab(
         carWashInfo: _carWashInfo,
-        onCarWashUpdated: _updateCarWashInfo,
-        onOwnerUpdated: _updateOwnerInfo,
+        onRefresh: () => setState(() {}),
       ),
+      OwnerAnalyticsTab(carWashId: carWashId),
       OwnerServicesTab(carWashId: carWashId),
       OwnerReceptionistsTab(
         carWashId: carWashId,
         carWashInfo: _carWashInfo,
       ),
-      TransactionScreen(carWashId: carWashId),
+      OwnerProfileTab(
+        carWashInfo: _carWashInfo,
+        onCarWashUpdated: _updateCarWashInfo,
+        onOwnerUpdated: _updateOwnerInfo,
+      ),
     ];
 
     return Scaffold(
       appBar: AppBar(
         title: Text(_getAppBarTitle()),
         backgroundColor: AppColors.background,
-        elevation: 1,
+        elevation: 0,
         centerTitle: true,
         automaticallyImplyLeading: false,
         actions: [
+          // إشعارات
+          Stack(
+            children: [
+              IconButton(
+                icon: const Icon(Icons.notifications_outlined),
+                onPressed: () {
+                  // TODO: فتح شاشة الإشعارات
+                },
+              ),
+              Positioned(
+                right: 8,
+                top: 8,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  constraints: const BoxConstraints(
+                    minWidth: 16,
+                    minHeight: 16,
+                  ),
+                  child: const Text(
+                    '3',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          // تسجيل الخروج
           IconButton(
             icon: const Icon(Icons.logout),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('تسجيل الخروج'),
-                  content: const Text('هل أنت متأكد من تسجيل الخروج؟'),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('إلغاء'),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        Navigator.pushNamedAndRemoveUntil(
-                          context,
-                          'welcome_screen',
-                          (route) => false,
-                        );
-                      },
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.error,
-                      ),
-                      child: const Text('تسجيل الخروج'),
-                    ),
-                  ],
-                ),
-              );
-            },
+            onPressed: () => _showLogoutDialog(),
           ),
         ],
       ),
@@ -157,32 +170,54 @@ class _OwnerScreenState extends State<OwnerScreen> {
         index: _selectedIndex,
         children: tabs,
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        type: BottomNavigationBarType.fixed,
-        currentIndex: _selectedIndex,
-        onTap: _onItemTapped,
-        selectedItemColor: AppColors.primary,
-        unselectedItemColor: Colors.grey,
-        selectedFontSize: 12,
-        unselectedFontSize: 12,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.store_mall_directory),
-            label: 'البيانات',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.build),
-            label: 'الخدمات',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.people),
-            label: 'الموظفين',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.receipt),
-            label: 'المعاملات',
-          ),
-        ],
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.1),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          currentIndex: _selectedIndex,
+          onTap: _onItemTapped,
+          selectedItemColor: AppColors.primary,
+          unselectedItemColor: Colors.grey,
+          selectedFontSize: 12,
+          unselectedFontSize: 11,
+          backgroundColor: Colors.white,
+          elevation: 0,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.dashboard_outlined),
+              activeIcon: Icon(Icons.dashboard),
+              label: 'لوحة التحكم',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.analytics_outlined),
+              activeIcon: Icon(Icons.analytics),
+              label: 'التحليلات',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.build_outlined),
+              activeIcon: Icon(Icons.build),
+              label: 'الخدمات',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.people_outline),
+              activeIcon: Icon(Icons.people),
+              label: 'الموظفين',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.settings_outlined),
+              activeIcon: Icon(Icons.settings),
+              label: 'الإعدادات',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -190,15 +225,57 @@ class _OwnerScreenState extends State<OwnerScreen> {
   String _getAppBarTitle() {
     switch (_selectedIndex) {
       case 0:
-        return 'إعدادات المغسلة';
+        return 'لوحة التحكم';
       case 1:
-        return 'إدارة الخدمات';
+        return 'التحليلات والتقارير';
       case 2:
-        return 'إدارة الموظفين';
+        return 'إدارة الخدمات';
       case 3:
-        return 'المعاملات والإحصائيات';
+        return 'إدارة الموظفين';
+      case 4:
+        return 'الإعدادات والملف الشخصي';
       default:
         return _carWashInfo['name'] ?? 'مغسلة';
     }
+  }
+
+  void _showLogoutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        title: Row(
+          children: const [
+            Icon(Icons.logout, color: AppColors.error),
+            SizedBox(width: 12),
+            Text('تسجيل الخروج'),
+          ],
+        ),
+        content: const Text('هل أنت متأكد من تسجيل الخروج من حسابك؟'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('إلغاء'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                'welcome_screen',
+                (route) => false,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('تسجيل الخروج'),
+          ),
+        ],
+      ),
+    );
   }
 }
