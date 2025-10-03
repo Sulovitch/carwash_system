@@ -158,6 +158,13 @@ class _ReservationScreenState extends State<ReservationScreen> {
     }
   }
 
+  // دالة للحصول على نوع المستخدم
+  String _getUserType() {
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    return args?['userType'] ?? 'user';
+  }
+
   List<TimeOfDay> _getAvailableTimeSlots() {
     if (_selectedDate == null) return [];
 
@@ -215,17 +222,25 @@ class _ReservationScreenState extends State<ReservationScreen> {
       return;
     }
 
-    // الانتقال لشاشة الدفع
-    final paymentSuccess = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PaymentScreen(
-          totalAmount: _selectedService!.price,
-        ),
-      ),
-    );
+    // التحقق من نوع المستخدم
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final userType = args?['userType'] ?? 'user';
 
-    if (paymentSuccess != true || !mounted) return;
+    // تخطي الدفع إذا كان موظف الاستقبال
+    if (userType != 'receptionist') {
+      // الانتقال لشاشة الدفع للمستخدم العادي فقط
+      final paymentSuccess = await Navigator.push<bool>(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PaymentScreen(
+            totalAmount: _selectedService!.price,
+          ),
+        ),
+      );
+
+      if (paymentSuccess != true || !mounted) return;
+    }
 
     setState(() => _isSubmitting = true);
 
@@ -254,6 +269,9 @@ class _ReservationScreenState extends State<ReservationScreen> {
       if (response.success) {
         ErrorHandler.showSuccessSnackBar(context, 'تم تأكيد الحجز بنجاح');
 
+        // توليد معرف الحجز
+        final int reservationId = DateTime.now().millisecondsSinceEpoch;
+
         final reservationData = {
           'user_id': _userId,
           'car_id': _selectedCar['car_id'],
@@ -265,6 +283,12 @@ class _ReservationScreenState extends State<ReservationScreen> {
           'date': formattedDate,
           'time': formattedTime,
           'status': 'Pending',
+          'reservation_id': reservationId,
+          // إضافة معلومات العميل
+          'user_name': _userName,
+          'user_phone': _userPhone,
+          'name': _userName,
+          'phone': _userPhone,
         };
 
         if (mounted) {
@@ -444,6 +468,7 @@ class _ReservationScreenState extends State<ReservationScreen> {
 
   Widget _buildReservationDetails() {
     final availableSlots = _getAvailableTimeSlots();
+    final userType = _getUserType();
 
     return Scaffold(
       appBar: AppBar(
@@ -468,6 +493,35 @@ class _ReservationScreenState extends State<ReservationScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // إشارة لموظف الاستقبال
+            if (userType == 'receptionist')
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: Colors.blue[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.blue[200]!),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, color: Colors.blue[700], size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'أنت تقوم بالحجز كموظف استقبال - لن تحتاج لعملية دفع',
+                        style: TextStyle(
+                          color: Colors.blue[700],
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // بطاقة معلومات الحجز
             Card(
               elevation: AppSizes.cardElevation,
@@ -651,12 +705,15 @@ class _ReservationScreenState extends State<ReservationScreen> {
                       )
                     : Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: const [
-                          Icon(Icons.check_circle_outline, color: Colors.white),
-                          SizedBox(width: 8),
+                        children: [
+                          const Icon(Icons.check_circle_outline,
+                              color: Colors.white),
+                          const SizedBox(width: 8),
                           Text(
-                            'تأكيد الحجز',
-                            style: TextStyle(
+                            _getUserType() == 'receptionist'
+                                ? 'تأكيد الحجز مباشرة'
+                                : 'المتابعة للدفع',
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,

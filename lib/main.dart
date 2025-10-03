@@ -1,9 +1,11 @@
+import 'screens/Receptionist_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/welcome_screen.dart';
 import 'screens/SignIn_screen.dart';
 import 'screens/SignUp_screen.dart';
-import 'screens/Reservation_screen.dart'; // أضف هذا السطر
+import 'screens/Reservation_screen.dart';
+import 'screens/CarInput_screen.dart';
 import 'config/app_constants.dart';
 
 void main() async {
@@ -109,8 +111,12 @@ class MyApp extends StatelessWidget {
         WelcomeScreen.routeName: (context) => const WelcomeScreen(),
         SigninScreen.routeName: (context) => const SigninScreen(),
         SignupScreen.routeName: (context) => const SignupScreen(),
-        ReservationScreen.screenRoute: (context) =>
-            const ReservationScreen(), // أضف هذا السطر
+        ReservationScreen.screenRoute: (context) => const ReservationScreen(),
+        CarInputScreen.routeName: (context) => CarInputScreen(userId: ''),
+        ReceptionistScreen.routeName: (context) => ReceptionistScreen(
+              receptionist: const {},
+              carWashInfo: const {},
+            ),
       },
 
       // معالج أفضل للـ routes التي تحتاج arguments
