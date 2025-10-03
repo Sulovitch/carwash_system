@@ -24,7 +24,11 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  List<Map<String, dynamic>> filteredReservations = [];
+  List<Map<String, dynamic>> allReservations = [];
+  List<Map<String, dynamic>> pendingReservations = [];
+  List<Map<String, dynamic>> approvedReservations = [];
+  List<Map<String, dynamic>> rejectedReservations = [];
+
   bool isLoadingReservations = false;
   bool hasInitialized = false;
 
@@ -37,14 +41,8 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 4, vsync: this);
 
-    // طباعة البيانات للتأكد من وصولها
-    print('Receptionist Data: ${widget.receptionist}');
-    print('Car Wash Info: ${widget.carWashInfo}');
-
-    _tabController = TabController(length: 3, vsync: this);
-
-    // تأجيل تحميل البيانات لتجنب الضغط على Main Thread
     SchedulerBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
         _initializeData();
@@ -65,7 +63,6 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
     }
   }
 
-  // منع النقرات المتكررة
   bool _isDoubleClick() {
     final now = DateTime.now();
     if (_lastClickTime != null &&
@@ -100,11 +97,21 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
         final Map<String, dynamic> data = json.decode(response.body);
 
         if (data['success']) {
+          final reservations = (data['reservations'] as List<dynamic>?)
+                  ?.map((item) => item as Map<String, dynamic>)
+                  .toList() ??
+              [];
+
+          // ترتيب من الأحدث
+          reservations.sort((a, b) {
+            final dateA = DateTime.tryParse(a['date'] ?? '') ?? DateTime(1970);
+            final dateB = DateTime.tryParse(b['date'] ?? '') ?? DateTime(1970);
+            return dateB.compareTo(dateA);
+          });
+
           setState(() {
-            filteredReservations = (data['reservations'] as List<dynamic>?)
-                    ?.map((item) => item as Map<String, dynamic>)
-                    .toList() ??
-                [];
+            allReservations = reservations;
+            _categorizeReservations();
             isLoadingReservations = false;
           });
         } else {
@@ -121,6 +128,17 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
         _showMessage('خطأ في تحميل الحجوزات: $e');
       }
     }
+  }
+
+  void _categorizeReservations() {
+    pendingReservations =
+        allReservations.where((res) => res['status'] == 'Pending').toList();
+    approvedReservations =
+        allReservations.where((res) => res['status'] == 'Approved').toList();
+    rejectedReservations = allReservations
+        .where(
+            (res) => res['status'] == 'Rejected' || res['status'] == 'Canceled')
+        .toList();
   }
 
   Future<void> _updateReservationStatus(
@@ -150,11 +168,12 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
         final Map<String, dynamic> data = json.decode(response.body);
         if (data['success']) {
           setState(() {
-            final index = filteredReservations.indexWhere(
+            final index = allReservations.indexWhere(
               (res) => res['reservation_id'] == reservationId,
             );
             if (index != -1) {
-              filteredReservations[index]['status'] = status;
+              allReservations[index]['status'] = status;
+              _categorizeReservations();
             }
           });
           _showMessage('تم تحديث حالة الحجز إلى $status', isError: false);
@@ -184,7 +203,8 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
     );
   }
 
-  Widget _buildReservationsTab() {
+  Widget _buildReservationsTab(
+      List<Map<String, dynamic>> reservations, String title) {
     if (!hasInitialized || isLoadingReservations) {
       return const Center(
         child: Column(
@@ -198,7 +218,7 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
       );
     }
 
-    if (filteredReservations.isEmpty) {
+    if (reservations.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -206,25 +226,9 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
             Icon(Icons.event_busy, size: 80, color: Colors.grey.shade400),
             const SizedBox(height: 16),
             Text(
-              'لا توجد حجوزات متاحة لهذه المغسلة',
+              'لا توجد حجوزات $title',
               style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
               textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton.icon(
-              onPressed: () {
-                final carWashId =
-                    widget.carWashInfo['carWashId']?.toString() ?? '';
-                if (carWashId.isNotEmpty) {
-                  fetchReservations(carWashId);
-                }
-              },
-              icon: const Icon(Icons.refresh),
-              label: const Text('تحديث'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blueAccent,
-                foregroundColor: Colors.white,
-              ),
             ),
           ],
         ),
@@ -240,20 +244,20 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
       },
       child: ListView.builder(
         padding: const EdgeInsets.all(16.0),
-        itemCount: filteredReservations.length,
+        itemCount: reservations.length,
         itemBuilder: (context, index) {
-          final reservation = filteredReservations[index];
-          return _buildReservationCard(reservation);
+          return _buildReservationCard(reservations[index]);
         },
       ),
     );
   }
 
   Widget _buildReservationCard(Map<String, dynamic> reservation) {
-    final isCanceled = reservation['status'] == 'Canceled';
-    final isPending = reservation['status'] == 'Pending';
+    final status = reservation['status'];
+    final isPending = status == 'Pending';
+    final isApproved = status == 'Approved';
+    final isRejected = status == 'Rejected' || status == 'Canceled';
 
-    // استخدام البيانات من الحجز أو من البيانات المدخلة
     final String userName =
         reservation['user_name'] ?? reservation['name'] ?? 'غير محدد';
     final String userPhone =
@@ -270,7 +274,6 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -291,13 +294,13 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: _getStatusColor(reservation['status']),
+                    color: _getStatusColor(status),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
-                    _getStatusText(reservation['status']),
+                    _getStatusText(status),
                     style: TextStyle(
-                      color: _getStatusTextColor(reservation['status']),
+                      color: _getStatusTextColor(status),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -307,7 +310,6 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
 
             const SizedBox(height: 16),
 
-            // Details
             _buildDetailRow(Icons.person, 'العميل', userName),
             _buildDetailRow(Icons.phone, 'الهاتف', userPhone),
             _buildDetailRow(
@@ -322,17 +324,14 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
 
             if (isPending) ...[
               const Divider(height: 20),
-              // Action Buttons
               Row(
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   OutlinedButton.icon(
-                    onPressed: isCanceled
-                        ? null
-                        : () => _updateReservationStatus(
-                              reservation['reservation_id'],
-                              'Approved',
-                            ),
+                    onPressed: () => _updateReservationStatus(
+                      reservation['reservation_id'],
+                      'Approved',
+                    ),
                     icon: const Icon(Icons.check_circle_outline),
                     label: const Text('قبول'),
                     style: OutlinedButton.styleFrom(
@@ -342,12 +341,10 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
                   ),
                   const SizedBox(width: 8),
                   OutlinedButton.icon(
-                    onPressed: isCanceled
-                        ? null
-                        : () => _updateReservationStatus(
-                              reservation['reservation_id'],
-                              'Rejected',
-                            ),
+                    onPressed: () => _updateReservationStatus(
+                      reservation['reservation_id'],
+                      'Rejected',
+                    ),
                     icon: const Icon(Icons.cancel_outlined),
                     label: const Text('رفض'),
                     style: OutlinedButton.styleFrom(
@@ -356,6 +353,26 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
                     ),
                   ),
                 ],
+              ),
+            ],
+
+            // زر التراجع للحجوزات المقبولة أو المرفوضة
+            if (isApproved || isRejected) ...[
+              const Divider(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () => _updateReservationStatus(
+                    reservation['reservation_id'],
+                    'Pending',
+                  ),
+                  icon: const Icon(Icons.undo),
+                  label: const Text('تراجع - إعادة لقيد الانتظار'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orange[700],
+                    side: BorderSide(color: Colors.orange[700]!),
+                  ),
+                ),
               ),
             ],
           ],
@@ -435,13 +452,13 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
     }
   }
 
+  // باقي الكود كما هو...
   Widget _buildMakeReservationTab() {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // معلومات شخصية
           Card(
             elevation: 4,
             shape: RoundedRectangleBorder(
@@ -486,15 +503,18 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
                       filled: true,
                       fillColor: Colors.grey[50],
                     ),
+                    onChanged: (value) {
+                      // TODO: البحث عن السيارات المرتبطة برقم الجوال
+                      if (value.length == 10) {
+                        _searchCarsByPhone(value);
+                      }
+                    },
                   ),
                 ],
               ),
             ),
           ),
-
           const SizedBox(height: 16),
-
-          // زر إضافة/تعديل السيارة
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -533,8 +553,6 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
               ),
             ),
           ),
-
-          // عرض تفاصيل السيارة المختارة
           if (_selectedCar != null)
             Card(
               elevation: 6,
@@ -575,10 +593,7 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
                 ),
               ),
             ),
-
           const SizedBox(height: 24),
-
-          // زر المتابعة
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -601,6 +616,11 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
         ],
       ),
     );
+  }
+
+  Future<void> _searchCarsByPhone(String phone) async {
+    // TODO: تنفيذ البحث عن السيارات المرتبطة برقم الجوال
+    // يمكن إضافة API endpoint جديد للبحث
   }
 
   void _proceedToReservation() {
@@ -635,18 +655,17 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
       },
     ).then((result) {
       if (result != null && result is Map<String, dynamic> && mounted) {
-        // إضافة اسم ورقم الهاتف للنتيجة
         result['name'] = userName;
         result['phone'] = userPhone;
         result['user_name'] = userName;
         result['user_phone'] = userPhone;
 
         setState(() {
-          filteredReservations.insert(0, result);
+          allReservations.insert(0, result);
+          _categorizeReservations();
         });
         _showMessage('تمت إضافة الحجز بنجاح!', isError: false);
 
-        // تنظيف الحقول
         _nameController.clear();
         _phoneController.clear();
         setState(() {
@@ -661,7 +680,6 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
       padding: const EdgeInsets.all(16.0),
       child: Column(
         children: [
-          // بطاقة معلومات الموظف
           Card(
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
@@ -716,77 +734,6 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
                         widget.receptionist['phone'] ??
                         'غير محدد',
                   ),
-                  const SizedBox(height: 16),
-                  _buildInfoItem(
-                    Icons.badge,
-                    'رقم الموظف',
-                    widget.receptionist['ReceptionistID']?.toString() ??
-                        widget.receptionist['receptionist_id']?.toString() ??
-                        'غير محدد',
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 16),
-
-          // بطاقة معلومات المغسلة
-          Card(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            elevation: 10,
-            child: Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.local_car_wash,
-                          color: Colors.blue[700], size: 28),
-                      const SizedBox(width: 12),
-                      const Text(
-                        'معلومات المغسلة',
-                        style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.black87,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 30),
-                  _buildInfoItem(
-                    Icons.store,
-                    'اسم المغسلة',
-                    widget.carWashInfo['name'] ?? 'غير محدد',
-                  ),
-                  const SizedBox(height: 16),
-                  _buildInfoItem(
-                    Icons.location_on,
-                    'الموقع',
-                    widget.carWashInfo['location'] ?? 'غير محدد',
-                  ),
-                  const SizedBox(height: 16),
-                  _buildInfoItem(
-                    Icons.access_time,
-                    'ساعات العمل',
-                    '${widget.carWashInfo['open_time'] ?? '00:00'} - ${widget.carWashInfo['close_time'] ?? '23:59'}',
-                  ),
-                  const SizedBox(height: 16),
-                  _buildInfoItem(
-                    Icons.timer,
-                    'مدة الخدمة',
-                    '${widget.carWashInfo['duration'] ?? '30'} دقيقة',
-                  ),
-                  const SizedBox(height: 16),
-                  _buildInfoItem(
-                    Icons.group,
-                    'السعة',
-                    '${widget.carWashInfo['capacity'] ?? '5'} سيارات',
-                  ),
                 ],
               ),
             ),
@@ -833,7 +780,7 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
     _tabController.dispose();
     _nameController.dispose();
     _phoneController.dispose();
-    filteredReservations.clear();
+    allReservations.clear();
     super.dispose();
   }
 
@@ -862,28 +809,22 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
           labelColor: Colors.blueAccent,
           unselectedLabelColor: Colors.grey,
           indicatorColor: Colors.blueAccent,
+          isScrollable: true,
           tabs: const [
-            Tab(
-              icon: Icon(Icons.list_alt),
-              text: 'الحجوزات',
-            ),
-            Tab(
-              icon: Icon(Icons.add_circle_outline),
-              text: 'حجز جديد',
-            ),
-            Tab(
-              icon: Icon(Icons.info_outline),
-              text: 'المعلومات',
-            ),
+            Tab(icon: Icon(Icons.pending_actions), text: 'قيد الانتظار'),
+            Tab(icon: Icon(Icons.check_circle), text: 'مقبول'),
+            Tab(icon: Icon(Icons.cancel), text: 'مرفوض'),
+            Tab(icon: Icon(Icons.add_circle_outline), text: 'حجز جديد'),
           ],
         ),
       ),
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildReservationsTab(),
+          _buildReservationsTab(pendingReservations, 'قيد الانتظار'),
+          _buildReservationsTab(approvedReservations, 'مقبولة'),
+          _buildReservationsTab(rejectedReservations, 'مرفوضة'),
           _buildMakeReservationTab(),
-          _buildReceptionistDetailsTab(),
         ],
       ),
     );

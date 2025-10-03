@@ -6,6 +6,7 @@ import 'screens/SignIn_screen.dart';
 import 'screens/SignUp_screen.dart';
 import 'screens/Reservation_screen.dart';
 import 'screens/CarInput_screen.dart';
+import 'screens/owner/monthly_subscription_screen.dart';
 import 'config/app_constants.dart';
 
 void main() async {
@@ -117,6 +118,8 @@ class MyApp extends StatelessWidget {
               receptionist: const {},
               carWashInfo: const {},
             ),
+        OwnerSubscriptionScreen.routeName: (context) =>
+            const OwnerSubscriptionScreen(),
       },
 
       // معالج أفضل للـ routes التي تحتاج arguments

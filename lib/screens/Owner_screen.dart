@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'owner/owner_services_tab.dart';
 import 'owner/owner_receptionists_tab.dart';
+import 'owner/owner_profile_tab.dart';
 import '../config/app_constants.dart';
 import 'Transaction_screen.dart';
 
@@ -51,6 +52,27 @@ class _OwnerScreenState extends State<OwnerScreen> {
     });
   }
 
+  void _updateCarWashInfo(Map<String, dynamic> updatedInfo) {
+    setState(() {
+      _carWashInfo = {
+        ..._carWashInfo,
+        ...updatedInfo,
+      };
+    });
+  }
+
+  void _updateOwnerInfo(Map<String, dynamic> updatedOwner) {
+    setState(() {
+      _carWashInfo = {
+        ..._carWashInfo,
+        'ownerProfile': {
+          ...(_carWashInfo['ownerProfile'] as Map<String, dynamic>? ?? {}),
+          ...updatedOwner,
+        },
+      };
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final carWashId = _carWashInfo['carWashId']?.toString() ?? '';
@@ -76,6 +98,11 @@ class _OwnerScreenState extends State<OwnerScreen> {
     }
 
     final tabs = [
+      OwnerProfileTab(
+        carWashInfo: _carWashInfo,
+        onCarWashUpdated: _updateCarWashInfo,
+        onOwnerUpdated: _updateOwnerInfo,
+      ),
       OwnerServicesTab(carWashId: carWashId),
       OwnerReceptionistsTab(
         carWashId: carWashId,
@@ -140,6 +167,10 @@ class _OwnerScreenState extends State<OwnerScreen> {
         unselectedFontSize: 12,
         items: const [
           BottomNavigationBarItem(
+            icon: Icon(Icons.store_mall_directory),
+            label: 'البيانات',
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.build),
             label: 'الخدمات',
           ),
@@ -159,10 +190,12 @@ class _OwnerScreenState extends State<OwnerScreen> {
   String _getAppBarTitle() {
     switch (_selectedIndex) {
       case 0:
-        return 'إدارة الخدمات';
+        return 'إعدادات المغسلة';
       case 1:
-        return 'إدارة الموظفين';
+        return 'إدارة الخدمات';
       case 2:
+        return 'إدارة الموظفين';
+      case 3:
         return 'المعاملات والإحصائيات';
       default:
         return _carWashInfo['name'] ?? 'مغسلة';

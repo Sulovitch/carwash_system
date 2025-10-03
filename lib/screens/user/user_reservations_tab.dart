@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../services/reservation_service.dart';
+import '../../services/carwash_service.dart';
 import '../../utils/error_handler.dart';
 import '../../config/app_constants.dart';
 
@@ -17,6 +18,7 @@ class UserReservationsTab extends StatefulWidget {
 
 class _UserReservationsTabState extends State<UserReservationsTab> {
   final _reservationService = ReservationService();
+  final _carWashService = CarWashService();
   List<Map<String, dynamic>> _reservations = [];
   bool _isLoading = true;
 
@@ -37,8 +39,33 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
       if (!mounted) return;
 
       if (response.success && response.data != null) {
+        final sortedReservations = response.data!;
+        // Enrich with car wash name/image if missing
+        try {
+          final cwResp = await _carWashService.fetchCarWashes();
+          if (cwResp.success && cwResp.data != null) {
+            final carWashes = cwResp.data!;
+            final Map<String, Map<String, dynamic>> byId = {
+              for (final cw in carWashes) (cw['id']?.toString() ?? ''): cw,
+            };
+            for (final r in sortedReservations) {
+              final String cwId = (r['car_wash_id'] ?? r['carWashId'] ?? (r['car_wash'] is Map ? r['car_wash']['id'] : null))?.toString() ?? '';
+              if (cwId.isNotEmpty && byId.containsKey(cwId)) {
+                final cw = byId[cwId]!;
+                r['car_wash_name'] = r['car_wash_name'] ?? cw['name'];
+                r['car_wash_profile_image'] = r['car_wash_profile_image'] ?? cw['profile_image'];
+              }
+            }
+          }
+        } catch (_) {}
+        sortedReservations.sort((a, b) {
+          final dateA = DateTime.tryParse(a['date'] ?? '') ?? DateTime(1970);
+          final dateB = DateTime.tryParse(b['date'] ?? '') ?? DateTime(1970);
+          return dateB.compareTo(dateA);
+        });
+
         setState(() {
-          _reservations = response.data!;
+          _reservations = sortedReservations;
           _isLoading = false;
         });
       } else {
@@ -61,13 +88,12 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
       context,
       title: 'إلغاء الحجز',
       content: 'هل أنت متأكد من إلغاء هذا الحجز؟',
-      confirmText: 'نعم، إلغاء',
-      cancelText: 'لا',
+      confirmText: 'تأكيد الإلغاء',
+      cancelText: 'رجوع',
     );
 
     if (!confirm) return;
 
-    // تحديث واجهة المستخدم مؤقتاً
     setState(() {
       _reservations[index]['status'] = 'جاري الإلغاء...';
     });
@@ -96,7 +122,6 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
           ),
         );
       } else {
-        // استعادة الحالة السابقة
         setState(() {
           _reservations[index]['status'] = previousStatus;
         });
@@ -104,7 +129,6 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
       }
     } catch (e) {
       if (!mounted) return;
-      // استعادة الحالة السابقة
       setState(() {
         _reservations[index]['status'] = previousStatus;
       });
@@ -129,7 +153,7 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
         setState(() {
           _reservations[index]['status'] = previousStatus;
         });
-        ErrorHandler.showSuccessSnackBar(context, 'تم استعادة الحجز');
+        ErrorHandler.showSuccessSnackBar(context, 'تم التراجع عن الإلغاء');
       }
     } catch (e) {
       if (!mounted) return;
@@ -140,12 +164,14 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
   Color _getStatusColor(String status) {
     switch (status) {
       case 'Pending':
-        return AppColors.warning;
+        return Colors.orange;
       case 'Approved':
-        return AppColors.success;
+        return Colors.green;
       case 'Rejected':
       case 'Canceled':
-        return AppColors.error;
+        return Colors.red;
+      case 'Completed':
+        return Colors.blue;
       default:
         return Colors.grey;
     }
@@ -156,7 +182,7 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
       case 'Pending':
         return 'قيد الانتظار';
       case 'Approved':
-        return 'مقبول';
+        return 'معتمد';
       case 'Rejected':
         return 'مرفوض';
       case 'Canceled':
@@ -166,6 +192,88 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
       default:
         return status;
     }
+  }
+
+  IconData _getStatusIcon(String status) {
+    switch (status) {
+      case 'Pending':
+        return Icons.pending_actions;
+      case 'Approved':
+        return Icons.check_circle;
+      case 'Rejected':
+        return Icons.cancel;
+      case 'Canceled':
+        return Icons.block;
+      case 'Completed':
+        return Icons.done_all;
+      default:
+        return Icons.info;
+    }
+  }
+
+  String _getCarWashName(Map<String, dynamic> r) {
+    final candidates = [
+      r['car_wash_name'],
+      r['carWashName'],
+      r['car_wash_title'],
+      r['carwash_name'],
+      r['carwash_title'],
+      r['name'],
+    ];
+    for (final c in candidates) {
+      final s = c?.toString();
+      if (s != null && s.trim().isNotEmpty) return s.trim();
+    }
+    final cw = r['car_wash'];
+    if (cw is Map) {
+      final nestedCandidates = [cw['name'], cw['title']];
+      for (final c in nestedCandidates) {
+        final s = c?.toString();
+        if (s != null && s.trim().isNotEmpty) return s.trim();
+      }
+    }
+    return '';
+  }
+
+  String _getCarWashImageUrl(Map<String, dynamic> r) {
+    final candidates = [
+      r['car_wash_profile_image'],
+      r['profile_image'],
+      r['car_wash_image'],
+      r['carWashProfileImage'],
+      r['logo'],
+      r['image'],
+    ];
+    for (final c in candidates) {
+      final s = c?.toString();
+      if (s != null && s.trim().isNotEmpty) return s.trim();
+    }
+    final cw = r['car_wash'];
+    if (cw is Map) {
+      final nestedCandidates = [
+        cw['profile_image'],
+        cw['image'],
+        cw['logo'],
+      ];
+      for (final c in nestedCandidates) {
+        final s = c?.toString();
+        if (s != null && s.trim().isNotEmpty) return s.trim();
+      }
+    }
+    return '';
+  }
+
+  Widget _buildCarWashAvatar(Map<String, dynamic> reservation) {
+    final url = _getCarWashImageUrl(reservation);
+    if (url.isNotEmpty) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) =>
+            const Icon(Icons.local_car_wash, color: Colors.blue, size: 16),
+      );
+    }
+    return const Icon(Icons.local_car_wash, color: Colors.blue, size: 16);
   }
 
   @override
@@ -186,15 +294,16 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
             ),
             const SizedBox(height: AppSpacing.medium),
             Text(
-              'لا توجد حجوزات',
+              'لا توجد حجوزات حالياً',
               style: TextStyle(
                 fontSize: 18,
                 color: Colors.grey[600],
+                fontWeight: FontWeight.w500,
               ),
             ),
             const SizedBox(height: AppSpacing.small),
             Text(
-              'احجز موعداً للبدء',
+              'قم بالحجز من الصفحة الرئيسية',
               style: TextStyle(
                 fontSize: 14,
                 color: Colors.grey[500],
@@ -213,102 +322,243 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
         itemBuilder: (context, index) {
           final reservation = _reservations[index];
           final status = reservation['status']?.toString() ?? 'Pending';
-          final canCancel = status == 'Pending';
+          final canCancel = status == 'Pending' || status == 'Approved';
 
-          return Card(
-            elevation: AppSizes.cardElevation,
-            margin: const EdgeInsets.only(bottom: AppSpacing.medium),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.medium),
+          return Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            child: Card(
+              elevation: 6,
+              shadowColor: Colors.black26,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // رأس البطاقة
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          reservation['service_name'] ?? 'خدمة غير محددة',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.small,
-                          vertical: AppSpacing.xs,
-                        ),
-                        decoration: BoxDecoration(
-                          color: _getStatusColor(status).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: _getStatusColor(status),
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Text(
-                          _getStatusText(status),
-                          style: TextStyle(
-                            color: _getStatusColor(status),
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: AppSpacing.large),
-
-                  // تفاصيل السيارة
-                  _buildDetailRow(
-                    Icons.directions_car,
-                    'السيارة',
-                    '${reservation['car_make']} ${reservation['car_model']} (${reservation['car_year']})',
-                  ),
-                  const SizedBox(height: AppSpacing.small),
-
-                  // التاريخ
-                  _buildDetailRow(
-                    Icons.calendar_today,
-                    'التاريخ',
-                    reservation['date'] ?? '',
-                  ),
-                  const SizedBox(height: AppSpacing.small),
-
-                  // الوقت
-                  _buildDetailRow(
-                    Icons.access_time,
-                    'الوقت',
-                    reservation['time'] ?? '',
-                  ),
-
-                  // زر الإلغاء
-                  if (canCancel) ...[
-                    const SizedBox(height: AppSpacing.medium),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: () => _cancelReservation(index),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.error,
-                          side: const BorderSide(color: AppColors.error),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(
-                              AppSizes.borderRadius,
-                            ),
-                          ),
-                        ),
-                        icon: const Icon(Icons.cancel),
-                        label: const Text('إلغاء الحجز'),
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(status).withOpacity(0.1),
+                      borderRadius: const BorderRadius.vertical(
+                        top: Radius.circular(20),
                       ),
                     ),
-                  ],
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                reservation['service_name'] ?? 'خدمة غير محددة',
+                                style: const TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 22,
+                                    height: 22,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.blueAccent.withOpacity(0.08),
+                                    ),
+                                    clipBehavior: Clip.antiAlias,
+                                    child: _buildCarWashAvatar(reservation),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Builder(
+                                      builder: (_) {
+                                        final name = _getCarWashName(reservation);
+                                        return Text(
+                                          name.isEmpty ? '-' : name,
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey[700],
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.calendar_today,
+                                    size: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    reservation['date'] ?? '',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Icon(
+                                    Icons.access_time,
+                                    size: 14,
+                                    color: Colors.grey[600],
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    reservation['time'] ?? '',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.grey[600],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _getStatusColor(status),
+                            borderRadius: BorderRadius.circular(20),
+                            boxShadow: [
+                              BoxShadow(
+                                color: _getStatusColor(status).withOpacity(0.3),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _getStatusIcon(status),
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                _getStatusText(status),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Body
+                  Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[50],
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: Colors.grey[200]!),
+                          ),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue[50],
+                                  borderRadius: BorderRadius.circular(10),
+                                ),
+                                child: const Icon(
+                                  Icons.directions_car,
+                                  color: Colors.blue,
+                                  size: 24,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      '${reservation['car_make'] ?? ''} ${reservation['car_model'] ?? ''}',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    Text(
+                                      'سنة: ${reservation['car_year'] ?? 'غير محدد'}',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        if (reservation['price'] != null) ...[
+                          const SizedBox(height: 8),
+                          _buildInfoRow(
+                            Icons.payments,
+                            'السعر',
+                            '${reservation['price']} ريال',
+                          ),
+                        ],
+
+                        if (canCancel) ...[
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () => _cancelReservation(index),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red[50],
+                                foregroundColor: Colors.red[700],
+                                elevation: 0,
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(color: Colors.red[200]!),
+                                ),
+                              ),
+                              icon: const Icon(Icons.cancel_outlined, size: 20),
+                              label: const Text(
+                                'إلغاء الحجز',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 15,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -318,11 +568,11 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
     );
   }
 
-  Widget _buildDetailRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(IconData icon, String label, String value) {
     return Row(
       children: [
-        Icon(icon, size: 20, color: Colors.grey[600]),
-        const SizedBox(width: AppSpacing.small),
+        Icon(icon, size: 18, color: Colors.grey[600]),
+        const SizedBox(width: 8),
         Text(
           '$label: ',
           style: TextStyle(
