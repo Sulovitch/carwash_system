@@ -1,4 +1,4 @@
-import 'screens/Receptionist_screen.dart';
+﻿import 'screens/Receptionist_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/welcome_screen.dart';
@@ -12,7 +12,7 @@ import 'config/app_constants.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // قفل التطبيق على الوضع العمودي فقط
+  // Ù‚ÙÙ„ Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø¹Ù„Ù‰ Ø§Ù„ÙˆØ¶Ø¹ Ø§Ù„Ø¹Ù…ÙˆØ¯ÙŠ ÙÙ‚Ø·
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -27,10 +27,10 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'تطبيق حجز المغاسل',
+      title: 'نظام إدارة المغسلة',
       debugShowCheckedModeBanner: false,
 
-      // الثيم الموحد
+      // Ø§Ù„Ø«ÙŠÙ… Ø§Ù„Ù…ÙˆØ­Ø¯
       theme: ThemeData(
         primaryColor: AppColors.primary,
         scaffoldBackgroundColor: AppColors.background,
@@ -81,7 +81,7 @@ class MyApp extends StatelessWidget {
         ),
 
         // Card Theme
-        cardTheme: CardTheme(
+        cardTheme: CardThemeData(
           elevation: AppSizes.cardElevation,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
@@ -89,7 +89,7 @@ class MyApp extends StatelessWidget {
         ),
 
         // Dialog Theme
-        dialogTheme: DialogTheme(
+        dialogTheme: DialogThemeData(
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
           ),
@@ -104,10 +104,10 @@ class MyApp extends StatelessWidget {
         ),
       ),
 
-      // الشاشة الابتدائية
+      // Ø§Ù„Ø´Ø§Ø´Ø© Ø§Ù„Ø§Ø¨ØªØ¯Ø§Ø¦ÙŠØ©
       initialRoute: WelcomeScreen.routeName,
 
-      // جميع الـ routes
+      // Ø¬Ù…ÙŠØ¹ Ø§Ù„Ù€ routes
       routes: {
         WelcomeScreen.routeName: (context) => const WelcomeScreen(),
         SigninScreen.routeName: (context) => const SigninScreen(),
@@ -122,26 +122,26 @@ class MyApp extends StatelessWidget {
             const OwnerSubscriptionScreen(),
       },
 
-      // معالج أفضل للـ routes التي تحتاج arguments
+      // Ù…Ø¹Ø§Ù„Ø¬ Ø£ÙØ¶Ù„ Ù„Ù„Ù€ routes Ø§Ù„ØªÙŠ ØªØ­ØªØ§Ø¬ arguments
       onGenerateRoute: (settings) {
-        // معالجة ReservationScreen مع arguments
+        // Ù…Ø¹Ø§Ù„Ø¬Ø© ReservationScreen Ù…Ø¹ arguments
         if (settings.name == ReservationScreen.screenRoute) {
           return MaterialPageRoute(
             builder: (context) => const ReservationScreen(),
-            settings: settings, // مهم لتمرير arguments
+            settings: settings, // Ù…Ù‡Ù… Ù„ØªÙ…Ø±ÙŠØ± arguments
           );
         }
 
-        // إذا لم يكن المسار معرّف، يعود null ليستخدم onUnknownRoute
+        // Ø¥Ø°Ø§ Ù„Ù… ÙŠÙƒÙ† Ø§Ù„Ù…Ø³Ø§Ø± Ù…Ø¹Ø±Ù‘ÙØŒ ÙŠØ¹ÙˆØ¯ null Ù„ÙŠØ³ØªØ®Ø¯Ù… onUnknownRoute
         return null;
       },
 
-      // معالج للـ routes الغير موجودة
+      // Ù…Ø¹Ø§Ù„Ø¬ Ù„Ù„Ù€ routes Ø§Ù„ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯Ø©
       onUnknownRoute: (settings) {
         return MaterialPageRoute(
           builder: (context) => Scaffold(
             appBar: AppBar(
-              title: const Text('خطأ'),
+              title: const Text('Ø®Ø·Ø£'),
               backgroundColor: AppColors.background,
             ),
             body: Center(
@@ -152,7 +152,7 @@ class MyApp extends StatelessWidget {
                       size: 80, color: AppColors.error),
                   const SizedBox(height: AppSpacing.large),
                   Text(
-                    'الصفحة غير موجودة',
+                    'Ø§Ù„ØµÙØ­Ø© ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯Ø©',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -161,7 +161,7 @@ class MyApp extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.small),
                   Text(
-                    'المسار المطلوب: ${settings.name}',
+                    'Ø§Ù„Ù…Ø³Ø§Ø± Ø§Ù„Ù…Ø·Ù„ÙˆØ¨: ${settings.name}',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey[600],
@@ -175,7 +175,7 @@ class MyApp extends StatelessWidget {
                       (route) => false,
                     ),
                     icon: const Icon(Icons.home),
-                    label: const Text('العودة للرئيسية'),
+                    label: const Text('Ø§Ù„Ø¹ÙˆØ¯Ø© Ù„Ù„Ø±Ø¦ÙŠØ³ÙŠØ©'),
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(200, 45),
                     ),
@@ -189,3 +189,5 @@ class MyApp extends StatelessWidget {
     );
   }
 }
+
+
