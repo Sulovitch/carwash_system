@@ -6,7 +6,9 @@ import 'dart:math' show cos, sqrt, asin;
 import '../../services/carwash_service.dart';
 import '../../services/car_service.dart';
 import '../../utils/error_handler.dart';
+import '../../utils/logger.dart';
 import '../../config/app_constants.dart';
+import '../../config/image_config.dart';
 import '../../models/Car.dart';
 import '../Reservation_screen.dart';
 
@@ -24,29 +26,46 @@ class UserHomeTab extends StatefulWidget {
   State<UserHomeTab> createState() => _UserHomeTabState();
 }
 
-class _UserHomeTabState extends State<UserHomeTab> {
+class _UserHomeTabState extends State<UserHomeTab>
+    with AutomaticKeepAliveClientMixin {
   final _carWashService = CarWashService();
   final _carService = CarService();
 
   List<Map<String, dynamic>> _carWashes = [];
   List<Map<String, dynamic>> _filteredCarWashes = [];
   List<Car> _userCars = [];
+
   bool _isLoading = true;
   String _searchQuery = '';
   Position? _currentPosition;
   bool _showMap = false;
+  int? _selectedMarkerIndex;
+
+  // للحفاظ على حالة الـ tab
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
-    _getCurrentLocation();
+    _initializeData();
+  }
+
+  Future<void> _initializeData() async {
+    AppLogger.info('بدء تحميل بيانات الصفحة الرئيسية');
+
+    // تحميل متوازي للبيانات
+    await Future.wait([
+      _loadData(),
+      _getCurrentLocation(),
+    ]);
   }
 
   Future<void> _getCurrentLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
+        AppLogger.warning('خدمة الموقع غير مفعلة');
         return;
       }
 
@@ -54,11 +73,13 @@ class _UserHomeTabState extends State<UserHomeTab> {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
         if (permission == LocationPermission.denied) {
+          AppLogger.warning('تم رفض إذن الموقع');
           return;
         }
       }
 
       if (permission == LocationPermission.deniedForever) {
+        AppLogger.warning('تم رفض إذن الموقع بشكل دائم');
         return;
       }
 
@@ -71,9 +92,10 @@ class _UserHomeTabState extends State<UserHomeTab> {
           _currentPosition = position;
           _calculateDistances();
         });
+        AppLogger.success('تم الحصول على الموقع الحالي');
       }
     } catch (e) {
-      print('Error getting location: $e');
+      AppLogger.error('خطأ في الحصول على الموقع', e);
     }
   }
 
@@ -109,271 +131,46 @@ class _UserHomeTabState extends State<UserHomeTab> {
     return 12742 * asin(sqrt(a));
   }
 
-  int? _selectedMarkerIndex;
-
-  Widget _buildMap() {
-    final markers = <Marker>[];
-
-    for (int i = 0; i < _filteredCarWashes.length; i++) {
-      final carWash = _filteredCarWashes[i];
-      final lat = double.tryParse(carWash['latitude']?.toString() ?? '') ?? 0;
-      final lng = double.tryParse(carWash['longitude']?.toString() ?? '') ?? 0;
-      if (lat == 0 && lng == 0) continue;
-
-      final point = LatLng(lat, lng);
-      markers.add(
-        Marker(
-          point: point,
-          width: 200,
-          height: 100,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (_selectedMarkerIndex == i)
-                GestureDetector(
-                  onTap: () => _selectCarAndProceed(carWash),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                    margin: const EdgeInsets.only(bottom: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(8),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                      border: Border.all(color: Colors.grey.shade200),
-                    ),
-                    constraints: const BoxConstraints(maxWidth: 180),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                (carWash['name']?.toString() ?? 'مغسلة'),
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                              const SizedBox(height: 2),
-                              Builder(
-                                builder: (_) {
-                                  final d = carWash['distance'] as double?;
-                                  return Text(
-                                    d != null ? '${d.toStringAsFixed(2)} كم' : '—',
-                                    style: const TextStyle(fontSize: 11, color: Colors.grey),
-                                  );
-                                },
-                              ),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
-                      ],
-                    ),
-                  ),
-                ),
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _selectedMarkerIndex = i;
-                  });
-                },
-                child: const Icon(
-                  Icons.location_on,
-                  color: Colors.red,
-                  size: 36,
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    if (_currentPosition != null) {
-      final userPoint =
-          LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
-      markers.add(
-        Marker(
-          point: userPoint,
-          width: 44,
-          height: 44,
-          child: const Icon(
-            Icons.my_location,
-            color: Colors.blue,
-            size: 28,
-          ),
-        ),
-      );
-    }
-
-    LatLng center;
-    if (_currentPosition != null) {
-      center = LatLng(
-        _currentPosition!.latitude,
-        _currentPosition!.longitude,
-      );
-    } else if (markers.isNotEmpty) {
-      center = markers.first.point;
-    } else {
-      center = const LatLng(24.7136, 46.6753); // Default center (Riyadh)
-    }
-
-    if (markers.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.map_outlined, size: 64, color: Colors.grey),
-            SizedBox(height: 12),
-            Text('لا توجد مواقع لعرضها'),
-          ],
-        ),
-      );
-    }
-
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: FlutterMap(
-        options: MapOptions(
-          initialCenter: center,
-          initialZoom: 12,
-          onTap: (tapPos, latLng) {
-            setState(() => _selectedMarkerIndex = null);
-          },
-        ),
-        children: [
-          TileLayer(
-            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-            userAgentPackageName: 'app',
-          ),
-          MarkerLayer(markers: markers),
-        ],
-      ),
-    );
-  }
-
-  void _onMarkerTap(Map<String, dynamic> carWash) {
-    final name = carWash['name']?.toString() ?? 'مغسلة';
-    final location = carWash['location']?.toString() ?? '';
-    final distance = carWash['distance'] as double?;
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-      ),
-      builder: (ctx) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    const Icon(Icons.location_on, size: 18, color: Colors.grey),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        location.isEmpty ? 'بدون عنوان' : location,
-                        style: TextStyle(color: Colors.grey.shade700),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                if (distance != null) ...[
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      const Icon(Icons.social_distance, size: 18, color: Colors.grey),
-                      const SizedBox(width: 6),
-                      Text('${distance.toStringAsFixed(2)} كم'),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          _selectCarAndProceed(carWash);
-                        },
-                        icon: const Icon(Icons.event_available),
-                        label: const Text('احجز'),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
   Future<void> _loadData() async {
+    if (!mounted) return;
+
     setState(() => _isLoading = true);
 
     try {
-      final carWashesResponse = await _carWashService.fetchCarWashes();
+      // تحميل متوازي
+      final results = await Future.wait([
+        _carWashService.fetchCarWashes(),
+        _carService.fetchUserCars(widget.userId),
+      ]);
+
+      if (!mounted) return;
+
+      // معالجة نتائج المغاسل
+      final carWashesResponse = results[0];
       if (carWashesResponse.success && carWashesResponse.data != null) {
         setState(() {
-          _carWashes = carWashesResponse.data!;
+          _carWashes =
+              (carWashesResponse.data! as List).cast<Map<String, dynamic>>();
           _filteredCarWashes = _carWashes;
           _calculateDistances();
           _sortCarWashes();
         });
+        AppLogger.success('تم تحميل ${_carWashes.length} مغسلة');
       }
 
-      final carsResponse = await _carService.fetchUserCars(widget.userId);
+      // معالجة نتائج السيارات
+      final carsResponse = results[1];
       if (carsResponse.success && carsResponse.data != null) {
         setState(() {
-          _userCars = carsResponse.data!;
+          _userCars = (carsResponse.data! as List).cast<Car>();
         });
+        AppLogger.success('تم تحميل ${_userCars.length} سيارة');
       }
-
-      if (!mounted) return;
     } catch (e) {
-      if (!mounted) return;
-      ErrorHandler.showErrorSnackBar(context, e);
+      if (mounted) {
+        AppLogger.error('خطأ في تحميل البيانات', e);
+        ErrorHandler.showErrorSnackBar(context, e);
+      }
     } finally {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -440,7 +237,9 @@ class _UserHomeTabState extends State<UserHomeTab> {
       } else {
         _filteredCarWashes = _carWashes.where((carWash) {
           final name = carWash['name']?.toString().toLowerCase() ?? '';
-          return name.contains(query.toLowerCase());
+          final location = carWash['location']?.toString().toLowerCase() ?? '';
+          final q = query.toLowerCase();
+          return name.contains(q) || location.contains(q);
         }).toList();
       }
       _sortCarWashes();
@@ -458,7 +257,7 @@ class _UserHomeTabState extends State<UserHomeTab> {
       );
 
       if (addCar && mounted) {
-        // الانتقال إلى tab السيارات
+        // TODO: الانتقال إلى tab السيارات
       }
       return;
     }
@@ -521,18 +320,7 @@ class _UserHomeTabState extends State<UserHomeTab> {
                 ),
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(12),
-                  leading: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.blue[50],
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Icon(
-                      Icons.directions_car,
-                      color: Colors.blue,
-                      size: 28,
-                    ),
-                  ),
+                  leading: ImageConfig.buildCarIcon(size: 50),
                   title: Text(
                     '${car.selectedMake ?? 'غير محدد'} ${car.selectedModel ?? ''}',
                     style: const TextStyle(
@@ -618,20 +406,10 @@ class _UserHomeTabState extends State<UserHomeTab> {
                   itemBuilder: (context, index) {
                     return Padding(
                       padding: const EdgeInsets.only(bottom: AppSpacing.medium),
-                      child: ClipRRect(
+                      child: ImageConfig.buildNetworkImage(
+                        imageUrl: images[index].toString(),
                         borderRadius:
                             BorderRadius.circular(AppSizes.borderRadius),
-                        child: Image.network(
-                          images[index].toString(),
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) {
-                            return Container(
-                              height: 200,
-                              color: Colors.grey[200],
-                              child: const Icon(Icons.broken_image, size: 50),
-                            );
-                          },
-                        ),
                       ),
                     );
                   },
@@ -646,403 +424,475 @@ class _UserHomeTabState extends State<UserHomeTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // مهم للـ AutomaticKeepAliveClientMixin
+
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
     }
 
     return Column(
       children: [
-        // شريط البحث والخريطة
-        Container(
-          padding: const EdgeInsets.all(AppSpacing.medium),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 5,
-                offset: const Offset(0, 2),
+        _buildSearchBar(),
+        Expanded(
+          child: _showMap ? _buildMap() : _buildCarWashesList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSearchBar() {
+    return Container(
+      padding: const EdgeInsets.all(AppSpacing.medium),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  onChanged: _filterCarWashes,
+                  decoration: InputDecoration(
+                    hintText: 'ابحث عن مغسلة...',
+                    prefixIcon: const Icon(Icons.search),
+                    border: OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(AppSizes.borderRadius),
+                    ),
+                    filled: true,
+                    fillColor: Colors.grey[100],
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: _showMap ? Colors.blue[50] : Colors.grey[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _showMap ? Colors.blue : Colors.grey[300]!,
+                  ),
+                ),
+                child: IconButton(
+                  icon: Icon(
+                    Icons.map,
+                    color: _showMap ? Colors.blue : Colors.grey[600],
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _showMap = !_showMap;
+                    });
+                  },
+                  tooltip: 'عرض الخريطة',
+                ),
               ),
             ],
           ),
-          child: Column(
-            children: [
-              Row(
+          if (_currentPosition != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8),
+              child: Row(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      onChanged: _filterCarWashes,
-                      decoration: InputDecoration(
-                        hintText: 'ابحث عن مغسلة...',
-                        prefixIcon: const Icon(Icons.search),
-                        border: OutlineInputBorder(
-                          borderRadius:
-                              BorderRadius.circular(AppSizes.borderRadius),
-                        ),
-                        filled: true,
-                        fillColor: Colors.grey[100],
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: _showMap ? Colors.blue[50] : Colors.grey[100],
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: _showMap ? Colors.blue : Colors.grey[300]!,
-                      ),
-                    ),
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.map,
-                        color: _showMap ? Colors.blue : Colors.grey[600],
-                      ),
-                      onPressed: () {
-                        setState(() {
-                          _showMap = !_showMap;
-                        });
-                      },
-                      tooltip: 'عرض الخريطة',
+                  Icon(Icons.location_on, size: 16, color: Colors.blue[700]),
+                  const SizedBox(width: 4),
+                  Text(
+                    'موقعك الحالي',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue[700],
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
               ),
-              if (_currentPosition != null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.location_on,
-                          size: 16, color: Colors.blue[700]),
-                      const SizedBox(width: 4),
-                      Text(
-                        'موقعك الحالي',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.blue[700],
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCarWashesList() {
+    if (_filteredCarWashes.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: AppSpacing.medium),
+            Text(
+              _searchQuery.isEmpty
+                  ? 'لا توجد مغاسل متاحة'
+                  : 'لم يتم العثور على نتائج',
+              style: TextStyle(
+                fontSize: 18,
+                color: Colors.grey[600],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadData,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(AppSpacing.medium),
+        itemCount: _filteredCarWashes.length,
+        itemBuilder: (context, index) {
+          final carWash = _filteredCarWashes[index];
+          final isOpen = _isCarWashOpen(carWash);
+          final distance = carWash['distance'] as double?;
+
+          return _buildCarWashCard(carWash, isOpen, distance);
+        },
+      ),
+    );
+  }
+
+  Widget _buildCarWashCard(
+    Map<String, dynamic> carWash,
+    bool isOpen,
+    double? distance,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      child: Card(
+        elevation: 4,
+        shadowColor: Colors.black26,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // صورة المغسلة
+            _buildCarWashImage(carWash, isOpen, distance),
+
+            // معلومات المغسلة
+            _buildCarWashInfo(carWash, isOpen),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCarWashImage(
+    Map<String, dynamic> carWash,
+    bool isOpen,
+    double? distance,
+  ) {
+    return Stack(
+      children: [
+        ClipRRect(
+          borderRadius: const BorderRadius.vertical(
+            top: Radius.circular(20),
+          ),
+          child: ImageConfig.buildNetworkImage(
+            imageUrl: carWash['profile_image'] ?? '',
+            width: double.infinity,
+            height: 180,
+            fit: BoxFit.cover,
+            errorWidget: ImageConfig.buildCarWashIcon(size: 64),
           ),
         ),
-
-        // قائمة المغاسل
-        Expanded(
-          child: _showMap ? _buildMap() : _filteredCarWashes.isEmpty
-              ? Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
-                      const SizedBox(height: AppSpacing.medium),
-                      Text(
-                        _searchQuery.isEmpty
-                            ? 'لا توجد مغاسل متاحة'
-                            : 'لم يتم العثور على نتائج',
-                        style: TextStyle(
-                          fontSize: 18,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              : RefreshIndicator(
-                  onRefresh: _loadData,
-                  child: ListView.builder(
-                    padding: const EdgeInsets.all(AppSpacing.medium),
-                    itemCount: _filteredCarWashes.length,
-                    itemBuilder: (context, index) {
-                      final carWash = _filteredCarWashes[index];
-                      final isOpen = _isCarWashOpen(carWash);
-                      final distance = carWash['distance'] as double?;
-
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        child: Card(
-                          elevation: 4,
-                          shadowColor: Colors.black26,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              // صورة المغسلة مع الحالة
-                              Stack(
-                                children: [
-                                  ClipRRect(
-                                    borderRadius: const BorderRadius.vertical(
-                                      top: Radius.circular(20),
-                                    ),
-                                    child: Image.network(
-                                      carWash['profile_image'] ?? '',
-                                      width: double.infinity,
-                                      height: 180,
-                                      fit: BoxFit.cover,
-                                      errorBuilder:
-                                          (context, error, stackTrace) {
-                                        return Container(
-                                          height: 180,
-                                          decoration: BoxDecoration(
-                                            gradient: LinearGradient(
-                                              colors: [
-                                                Colors.blue[100]!,
-                                                Colors.blue[300]!,
-                                              ],
-                                            ),
-                                          ),
-                                          child: const Icon(
-                                            Icons.local_car_wash,
-                                            size: 64,
-                                            color: Colors.white,
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  ),
-                                  // شارة الحالة
-                                  Positioned(
-                                    top: 12,
-                                    right: 12,
-                                    child: Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 12,
-                                        vertical: 6,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color:
-                                            isOpen ? Colors.green : Colors.red,
-                                        borderRadius: BorderRadius.circular(20),
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color:
-                                                Colors.black.withOpacity(0.3),
-                                            blurRadius: 4,
-                                          ),
-                                        ],
-                                      ),
-                                      child: Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Container(
-                                            width: 8,
-                                            height: 8,
-                                            decoration: const BoxDecoration(
-                                              color: Colors.white,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 6),
-                                          Text(
-                                            isOpen ? 'مفتوح' : 'مغلق',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 12,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                  // المسافة
-                                  if (distance != null)
-                                    Positioned(
-                                      bottom: 12,
-                                      left: 12,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: Colors.black.withOpacity(0.7),
-                                          borderRadius:
-                                              BorderRadius.circular(20),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(
-                                              Icons.near_me,
-                                              color: Colors.white,
-                                              size: 14,
-                                            ),
-                                            const SizedBox(width: 4),
-                                            Text(
-                                              '${distance.toStringAsFixed(1)} كم',
-                                              style: const TextStyle(
-                                                color: Colors.white,
-                                                fontWeight: FontWeight.bold,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                ],
-                              ),
-
-                              // معلومات المغسلة
-                              Padding(
-                                padding: const EdgeInsets.all(16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      carWash['name'] ?? 'مغسلة',
-                                      style: const TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-
-                                    // الموقع
-                                    Row(
-                                      children: [
-                                        Icon(Icons.location_on,
-                                            size: 16, color: Colors.grey[600]),
-                                        const SizedBox(width: 4),
-                                        Expanded(
-                                          child: Text(
-                                            carWash['location'] ??
-                                                'لا يوجد موقع',
-                                            style: TextStyle(
-                                              color: Colors.grey[600],
-                                              fontSize: 14,
-                                            ),
-                                            maxLines: 1,
-                                            overflow: TextOverflow.ellipsis,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-
-                                    // ساعات العمل
-                                    if (carWash['open_time'] != null &&
-                                        carWash['close_time'] != null)
-                                      Row(
-                                        children: [
-                                          Icon(Icons.access_time,
-                                              size: 16,
-                                              color: Colors.grey[600]),
-                                          const SizedBox(width: 4),
-                                          Text(
-                                            'من ${carWash['open_time']} - ${carWash['close_time']}',
-                                            style: TextStyle(
-                                              color: Colors.grey[600],
-                                              fontSize: 14,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-
-                                    const SizedBox(height: 16),
-
-                                    // الأزرار
-                                    Row(
-                                      children: [
-                                        // زر الصور
-                                        if (carWash['car_wash_images'] !=
-                                                null &&
-                                            (carWash['car_wash_images'] as List)
-                                                .isNotEmpty)
-                                          Expanded(
-                                            child: OutlinedButton.icon(
-                                              icon: const Icon(
-                                                Icons.photo_library,
-                                                size: 18,
-                                              ),
-                                              label: Text(
-                                                'صور (${(carWash['car_wash_images'] as List).length})',
-                                                style: const TextStyle(
-                                                    fontSize: 13),
-                                              ),
-                                              style: OutlinedButton.styleFrom(
-                                                foregroundColor:
-                                                    Colors.grey[700],
-                                                side: BorderSide(
-                                                  color: Colors.grey[300]!,
-                                                ),
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  vertical: 12,
-                                                ),
-                                              ),
-                                              onPressed: () =>
-                                                  _showCarWashImages(
-                                                carWash['car_wash_images'],
-                                              ),
-                                            ),
-                                          ),
-
-                                        const SizedBox(width: 8),
-
-                                        // زر الحجز
-                                        Expanded(
-                                          flex: 2,
-                                          child: ElevatedButton.icon(
-                                            icon: const Icon(
-                                              Icons.event_available,
-                                              size: 18,
-                                            ),
-                                            label: const Text(
-                                              'احجز الآن',
-                                              style: TextStyle(
-                                                fontWeight: FontWeight.bold,
-                                              ),
-                                            ),
-                                            onPressed: isOpen
-                                                ? () => _selectCarAndProceed(
-                                                    carWash)
-                                                : null,
-                                            style: ElevatedButton.styleFrom(
-                                              backgroundColor: isOpen
-                                                  ? AppColors.primary
-                                                  : Colors.grey[400],
-                                              foregroundColor: Colors.white,
-                                              disabledBackgroundColor:
-                                                  Colors.grey[300],
-                                              disabledForegroundColor:
-                                                  Colors.grey[600],
-                                              padding:
-                                                  const EdgeInsets.symmetric(
-                                                vertical: 12,
-                                              ),
-                                              shape: RoundedRectangleBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(10),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
+        // شارة الحالة
+        Positioned(
+          top: 12,
+          right: 12,
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: 12,
+              vertical: 6,
+            ),
+            decoration: BoxDecoration(
+              color: isOpen ? Colors.green : Colors.red,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.3),
+                  blurRadius: 4,
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    shape: BoxShape.circle,
                   ),
                 ),
+                const SizedBox(width: 6),
+                Text(
+                  isOpen ? 'مفتوح' : 'مغلق',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
+        // المسافة
+        if (distance != null)
+          Positioned(
+            bottom: 12,
+            left: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 6,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.near_me,
+                    color: Colors.white,
+                    size: 14,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${distance.toStringAsFixed(1)} كم',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
+    );
+  }
+
+  Widget _buildCarWashInfo(Map<String, dynamic> carWash, bool isOpen) {
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            carWash['name'] ?? 'مغسلة',
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          // الموقع
+          Row(
+            children: [
+              Icon(Icons.location_on, size: 16, color: Colors.grey[600]),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  carWash['location'] ?? 'لا يوجد موقع',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+
+          // ساعات العمل
+          if (carWash['open_time'] != null && carWash['close_time'] != null)
+            Row(
+              children: [
+                Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+                const SizedBox(width: 4),
+                Text(
+                  'من ${carWash['open_time']} - ${carWash['close_time']}',
+                  style: TextStyle(
+                    color: Colors.grey[600],
+                    fontSize: 14,
+                  ),
+                ),
+              ],
+            ),
+
+          const SizedBox(height: 16),
+
+          // الأزرار
+          Row(
+            children: [
+              // زر الصور
+              if (carWash['car_wash_images'] != null &&
+                  (carWash['car_wash_images'] as List).isNotEmpty)
+                Expanded(
+                  child: OutlinedButton.icon(
+                    icon: const Icon(Icons.photo_library, size: 18),
+                    label: Text(
+                      'صور (${(carWash['car_wash_images'] as List).length})',
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.grey[700],
+                      side: BorderSide(color: Colors.grey[300]!),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onPressed: () => _showCarWashImages(
+                      carWash['car_wash_images'],
+                    ),
+                  ),
+                ),
+
+              const SizedBox(width: 8),
+
+              // زر الحجز
+              Expanded(
+                flex: 2,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.event_available, size: 18),
+                  label: const Text(
+                    'احجز الآن',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed:
+                      isOpen ? () => _selectCarAndProceed(carWash) : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor:
+                        isOpen ? AppColors.primary : Colors.grey[400],
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.grey[300],
+                    disabledForegroundColor: Colors.grey[600],
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMap() {
+    // نفس الكود من المثال السابق
+    final markers = <Marker>[];
+
+    for (int i = 0; i < _filteredCarWashes.length; i++) {
+      final carWash = _filteredCarWashes[i];
+      final lat = double.tryParse(carWash['latitude']?.toString() ?? '') ?? 0;
+      final lng = double.tryParse(carWash['longitude']?.toString() ?? '') ?? 0;
+      if (lat == 0 && lng == 0) continue;
+
+      final point = LatLng(lat, lng);
+      markers.add(
+        Marker(
+          point: point,
+          width: 200,
+          height: 100,
+          child: GestureDetector(
+            onTap: () {
+              setState(() {
+                _selectedMarkerIndex = i;
+              });
+            },
+            child: const Icon(
+              Icons.location_on,
+              color: Colors.red,
+              size: 36,
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_currentPosition != null) {
+      final userPoint =
+          LatLng(_currentPosition!.latitude, _currentPosition!.longitude);
+      markers.add(
+        Marker(
+          point: userPoint,
+          width: 44,
+          height: 44,
+          child: const Icon(
+            Icons.my_location,
+            color: Colors.blue,
+            size: 28,
+          ),
+        ),
+      );
+    }
+
+    LatLng center;
+    if (_currentPosition != null) {
+      center = LatLng(
+        _currentPosition!.latitude,
+        _currentPosition!.longitude,
+      );
+    } else if (markers.isNotEmpty) {
+      center = markers.first.point;
+    } else {
+      center = const LatLng(24.7136, 46.6753);
+    }
+
+    if (markers.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.map_outlined, size: 64, color: Colors.grey),
+            SizedBox(height: 12),
+            Text('لا توجد مواقع لعرضها'),
+          ],
+        ),
+      );
+    }
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: FlutterMap(
+        options: MapOptions(
+          initialCenter: center,
+          initialZoom: 12,
+          onTap: (tapPos, latLng) {
+            setState(() => _selectedMarkerIndex = null);
+          },
+        ),
+        children: [
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            userAgentPackageName: 'app',
+          ),
+          MarkerLayer(markers: markers),
+        ],
+      ),
     );
   }
 }

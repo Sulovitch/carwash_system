@@ -3,17 +3,37 @@ import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/api_response.dart';
 import '../models/Service.dart';
+import '../utils/cache_manager.dart';
+import '../utils/logger.dart';
+import '../utils/network_helper.dart';
 
 class ServiceService {
+  final _cache = CacheManager();
+  final _network = NetworkHelper();
+
+  String _getCacheKey(String carWashId) => 'services_$carWashId';
+
   Future<ApiResponse<List<Service>>> fetchServices(String carWashId) async {
     try {
-      final response = await http.post(
+      // تحقق من الكاش
+      final cacheKey = _getCacheKey(carWashId);
+      final cached = _cache.getData(cacheKey);
+
+      if (cached != null) {
+        AppLogger.info('استخدام الخدمات من الكاش', 'Services');
+        return ApiResponse.success(cached as List<Service>);
+      }
+
+      AppLogger.network('POST', ApiConfig.serviceEndpoint);
+
+      final response = await _network.post(
         Uri.parse(ApiConfig.serviceEndpoint),
         body: {
           'action': 'get_services',
           'car_wash_id': carWashId,
         },
-      ).timeout(ApiConfig.connectionTimeout);
+        timeout: ApiConfig.connectionTimeout,
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -22,6 +42,15 @@ class ServiceService {
           final services = (data['data'] as List<dynamic>)
               .map((item) => Service.fromJson(item))
               .toList();
+
+          // حفظ في الكاش لمدة 10 دقائق
+          _cache.cacheData(
+            cacheKey,
+            services,
+            duration: const Duration(minutes: 10),
+          );
+
+          AppLogger.success('تم جلب ${services.length} خدمة');
           return ApiResponse.success(services);
         } else {
           return ApiResponse.error(data['message'] ?? 'فشل في جلب الخدمات');
@@ -29,7 +58,8 @@ class ServiceService {
       } else {
         return ApiResponse.error('خطأ في الاتصال: ${response.statusCode}');
       }
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.error('خطأ في fetchServices', e, stack);
       return ApiResponse.error(e.toString());
     }
   }
@@ -42,6 +72,8 @@ class ServiceService {
     required String imagePath,
   }) async {
     try {
+      AppLogger.network('POST', '${ApiConfig.serviceEndpoint}?action=add');
+
       final request = http.MultipartRequest(
         'POST',
         Uri.parse(ApiConfig.serviceEndpoint),
@@ -58,8 +90,11 @@ class ServiceService {
         );
       }
 
-      final response =
-          await request.send().timeout(ApiConfig.connectionTimeout);
+      final response = await request.send().timeout(
+            ApiConfig.connectionTimeout,
+            onTimeout: () => throw Exception('انتهت مهلة الاتصال'),
+          );
+
       final responseBody = await response.stream.bytesToString();
 
       if (response.statusCode == 200) {
@@ -73,6 +108,11 @@ class ServiceService {
             price: price,
             imageUrl: data['image_url'],
           );
+
+          // مسح الكاش
+          _cache.clearDataCache(_getCacheKey(carWashId));
+
+          AppLogger.success('تم إضافة الخدمة');
           return ApiResponse.success(service, 'تم إضافة الخدمة بنجاح');
         } else {
           return ApiResponse.error(data['message'] ?? 'فشل في إضافة الخدمة');
@@ -80,7 +120,8 @@ class ServiceService {
       } else {
         return ApiResponse.error('خطأ في الاتصال: ${response.statusCode}');
       }
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.error('خطأ في addService', e, stack);
       return ApiResponse.error(e.toString());
     }
   }
@@ -93,6 +134,8 @@ class ServiceService {
     String? imagePath,
   }) async {
     try {
+      AppLogger.network('POST', '${ApiConfig.serviceEndpoint}?action=edit');
+
       final request = http.MultipartRequest(
         'POST',
         Uri.parse(ApiConfig.serviceEndpoint),
@@ -109,8 +152,11 @@ class ServiceService {
         );
       }
 
-      final response =
-          await request.send().timeout(ApiConfig.connectionTimeout);
+      final response = await request.send().timeout(
+            ApiConfig.connectionTimeout,
+            onTimeout: () => throw Exception('انتهت مهلة الاتصال'),
+          );
+
       final responseBody = await response.stream.bytesToString();
 
       if (response.statusCode == 200) {
@@ -124,6 +170,11 @@ class ServiceService {
             price: price,
             imageUrl: data['image_url'],
           );
+
+          // مسح كل كاش الخدمات
+          _cache.clearCache();
+
+          AppLogger.success('تم تحديث الخدمة');
           return ApiResponse.success(service, 'تم تحديث الخدمة بنجاح');
         } else {
           return ApiResponse.error(data['message'] ?? 'فشل في تحديث الخدمة');
@@ -131,25 +182,33 @@ class ServiceService {
       } else {
         return ApiResponse.error('خطأ في الاتصال: ${response.statusCode}');
       }
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.error('خطأ في updateService', e, stack);
       return ApiResponse.error(e.toString());
     }
   }
 
   Future<ApiResponse<bool>> deleteService(int serviceId) async {
     try {
-      final response = await http.post(
+      AppLogger.network('POST', '${ApiConfig.serviceEndpoint}?action=delete');
+
+      final response = await _network.post(
         Uri.parse(ApiConfig.serviceEndpoint),
         body: {
           'action': 'delete',
           'ServiceID': serviceId.toString(),
         },
-      ).timeout(ApiConfig.connectionTimeout);
+        timeout: ApiConfig.connectionTimeout,
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
 
         if (data['success'] == true) {
+          // مسح الكاش
+          _cache.clearCache();
+
+          AppLogger.success('تم حذف الخدمة');
           return ApiResponse.success(true, 'تم حذف الخدمة بنجاح');
         } else {
           return ApiResponse.error(data['message'] ?? 'فشل في حذف الخدمة');
@@ -157,7 +216,8 @@ class ServiceService {
       } else {
         return ApiResponse.error('خطأ في الاتصال: ${response.statusCode}');
       }
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.error('خطأ في deleteService', e, stack);
       return ApiResponse.error(e.toString());
     }
   }

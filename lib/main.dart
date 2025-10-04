@@ -1,6 +1,5 @@
 ﻿import 'package:app/screens/Owner_screen.dart';
 
-import 'screens/Receptionist_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'screens/welcome_screen.dart';
@@ -10,15 +9,26 @@ import 'screens/Reservation_screen.dart';
 import 'screens/CarInput_screen.dart';
 import 'screens/owner/monthly_subscription_screen.dart';
 import 'config/app_constants.dart';
+import 'utils/logger.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Ù‚ÙÙ„ Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø¹Ù„Ù‰ Ø§Ù„ÙˆØ¶Ø¹ Ø§Ù„Ø¹Ù…ÙˆØ¯ÙŠ ÙÙ‚Ø·
+  // قفل التطبيق على الوضع العمودي فقط
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
+
+  // إيقاف الـ overlay في الأعلى والأسفل
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.dark,
+    ),
+  );
+
+  AppLogger.info('🚀 تم تشغيل التطبيق');
 
   runApp(const MyApp());
 }
@@ -32,10 +42,24 @@ class MyApp extends StatelessWidget {
       title: 'نظام إدارة المغسلة',
       debugShowCheckedModeBanner: false,
 
-      // Ø§Ù„Ø«ÙŠÙ… Ø§Ù„Ù…ÙˆØ­Ø¯
+      // تحسين الأداء
+      builder: (context, child) {
+        return MediaQuery(
+          data: MediaQuery.of(context).copyWith(
+            textScaleFactor: 1.0, // منع تكبير النصوص من إعدادات النظام
+          ),
+          child: child!,
+        );
+      },
+
+      // الثيم الموحد
       theme: ThemeData(
         primaryColor: AppColors.primary,
         scaffoldBackgroundColor: AppColors.background,
+        useMaterial3: true, // استخدام Material 3 للأداء الأفضل
+
+        // تحسين أداء الصور
+        platform: TargetPlatform.android,
 
         // AppBar Theme
         appBarTheme: const AppBarTheme(
@@ -104,12 +128,20 @@ class MyApp extends StatelessWidget {
             borderRadius: BorderRadius.circular(AppSizes.borderRadius),
           ),
         ),
+
+        // تحسين أداء الانتقالات
+        pageTransitionsTheme: const PageTransitionsTheme(
+          builders: {
+            TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+            TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          },
+        ),
       ),
 
-      // Ø§Ù„Ø´Ø§Ø´Ø© Ø§Ù„Ø§Ø¨ØªØ¯Ø§Ø¦ÙŠØ©
+      // الشاشة الابتدائية
       initialRoute: WelcomeScreen.routeName,
 
-      // Ø¬Ù…ÙŠØ¹ Ø§Ù„Ù€ routes
+      // جميع الـ routes
       routes: {
         WelcomeScreen.routeName: (context) => const WelcomeScreen(),
         SigninScreen.routeName: (context) => const SigninScreen(),
@@ -121,26 +153,28 @@ class MyApp extends StatelessWidget {
             const OwnerSubscriptionScreen(),
       },
 
-      // Ù…Ø¹Ø§Ù„Ø¬ Ø£ÙØ¶Ù„ Ù„Ù„Ù€ routes Ø§Ù„ØªÙŠ ØªØ­ØªØ§Ø¬ arguments
+      // معالج أفضل للـ routes التي تحتاج arguments
       onGenerateRoute: (settings) {
-        // Ù…Ø¹Ø§Ù„Ø¬Ø© ReservationScreen Ù…Ø¹ arguments
+        AppLogger.info('التنقل إلى: ${settings.name}');
+
         if (settings.name == ReservationScreen.screenRoute) {
           return MaterialPageRoute(
             builder: (context) => const ReservationScreen(),
-            settings: settings, // Ù…Ù‡Ù… Ù„ØªÙ…Ø±ÙŠØ± arguments
+            settings: settings,
           );
         }
 
-        // Ø¥Ø°Ø§ Ù„Ù… ÙŠÙƒÙ† Ø§Ù„Ù…Ø³Ø§Ø± Ù…Ø¹Ø±Ù‘ÙØŒ ÙŠØ¹ÙˆØ¯ null Ù„ÙŠØ³ØªØ®Ø¯Ù… onUnknownRoute
         return null;
       },
 
-      // Ù…Ø¹Ø§Ù„Ø¬ Ù„Ù„Ù€ routes Ø§Ù„ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯Ø©
+      // معالج للـ routes الغير موجودة
       onUnknownRoute: (settings) {
+        AppLogger.warning('مسار غير موجود: ${settings.name}');
+
         return MaterialPageRoute(
           builder: (context) => Scaffold(
             appBar: AppBar(
-              title: const Text('Ø®Ø·Ø£'),
+              title: const Text('خطأ'),
               backgroundColor: AppColors.background,
             ),
             body: Center(
@@ -151,7 +185,7 @@ class MyApp extends StatelessWidget {
                       size: 80, color: AppColors.error),
                   const SizedBox(height: AppSpacing.large),
                   Text(
-                    'Ø§Ù„ØµÙØ­Ø© ØºÙŠØ± Ù…ÙˆØ¬ÙˆØ¯Ø©',
+                    'الصفحة غير موجودة',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
@@ -160,7 +194,7 @@ class MyApp extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.small),
                   Text(
-                    'Ø§Ù„Ù…Ø³Ø§Ø± Ø§Ù„Ù…Ø·Ù„ÙˆØ¨: ${settings.name}',
+                    'المسار المطلوب: ${settings.name}',
                     style: TextStyle(
                       fontSize: 14,
                       color: Colors.grey[600],
@@ -174,7 +208,7 @@ class MyApp extends StatelessWidget {
                       (route) => false,
                     ),
                     icon: const Icon(Icons.home),
-                    label: const Text('Ø§Ù„Ø¹ÙˆØ¯Ø© Ù„Ù„Ø±Ø¦ÙŠØ³ÙŠØ©'),
+                    label: const Text('العودة للرئيسية'),
                     style: ElevatedButton.styleFrom(
                       minimumSize: const Size(200, 45),
                     ),

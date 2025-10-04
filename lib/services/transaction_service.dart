@@ -2,16 +2,37 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
 import '../models/api_response.dart';
+import '../utils/cache_manager.dart';
+import '../utils/logger.dart';
+import '../utils/network_helper.dart';
 
 class TransactionService {
+  final _cache = CacheManager();
+  final _network = NetworkHelper();
+
+  String _getTransactionsCacheKey(String carWashId) =>
+      'transactions_$carWashId';
+
   Future<ApiResponse<List<Map<String, dynamic>>>> fetchTransactions(
     String carWashId,
   ) async {
     try {
-      final response = await http.post(
+      // تحقق من الكاش أولاً
+      final cacheKey = _getTransactionsCacheKey(carWashId);
+      final cached = _cache.getData(cacheKey);
+
+      if (cached != null) {
+        AppLogger.info('استخدام المعاملات من الكاش', 'Transactions');
+        return ApiResponse.success(cached as List<Map<String, dynamic>>);
+      }
+
+      AppLogger.network('POST', ApiConfig.transactionEndpoint);
+
+      final response = await _network.post(
         Uri.parse(ApiConfig.transactionEndpoint),
         body: {'car_wash_id': carWashId},
-      ).timeout(ApiConfig.connectionTimeout);
+        timeout: ApiConfig.connectionTimeout,
+      );
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -20,6 +41,15 @@ class TransactionService {
           final reservations = (data['reservations'] as List<dynamic>)
               .map((item) => item as Map<String, dynamic>)
               .toList();
+
+          // حفظ في الكاش لمدة 3 دقائق
+          _cache.cacheData(
+            cacheKey,
+            reservations,
+            duration: const Duration(minutes: 3),
+          );
+
+          AppLogger.success('تم جلب ${reservations.length} معاملة');
           return ApiResponse.success(reservations);
         } else {
           return ApiResponse.error(data['message'] ?? 'فشل في جلب المعاملات');
@@ -27,11 +57,13 @@ class TransactionService {
       } else {
         return ApiResponse.error('خطأ في الاتصال: ${response.statusCode}');
       }
-    } catch (e) {
+    } catch (e, stack) {
+      AppLogger.error('خطأ في fetchTransactions', e, stack);
       return ApiResponse.error(e.toString());
     }
   }
 
+  /// حساب الإحصائيات من المعاملات
   Map<String, dynamic> calculateStatistics(
     List<Map<String, dynamic>> transactions,
   ) {
@@ -57,6 +89,11 @@ class TransactionService {
       }
     }
 
+    AppLogger.info(
+      'إحصائيات: $totalReservations حجز، $completedReservations مكتمل، ${totalEarnings.toStringAsFixed(2)} ريال',
+      'Statistics',
+    );
+
     return {
       'totalEarnings': totalEarnings,
       'totalReservations': totalReservations,
@@ -66,6 +103,7 @@ class TransactionService {
     };
   }
 
+  /// حساب الأرباح حسب التاريخ
   Map<DateTime, double> getEarningsByDate(
     List<Map<String, dynamic>> transactions,
   ) {
@@ -83,7 +121,8 @@ class TransactionService {
           earningsByDate[normalizedDate] =
               (earningsByDate[normalizedDate] ?? 0.0) + price;
         } catch (e) {
-          // Skip invalid dates
+          AppLogger.warning(
+              'تاريخ غير صالح في المعاملات: ${transaction['date']}');
           continue;
         }
       }
@@ -92,6 +131,7 @@ class TransactionService {
     return earningsByDate;
   }
 
+  /// حساب الحجوزات حسب التاريخ
   Map<DateTime, int> getReservationsByDate(
     List<Map<String, dynamic>> transactions,
   ) {
@@ -105,7 +145,7 @@ class TransactionService {
         reservationsByDate[normalizedDate] =
             (reservationsByDate[normalizedDate] ?? 0) + 1;
       } catch (e) {
-        // Skip invalid dates
+        AppLogger.warning('تاريخ غير صالح: ${transaction['date']}');
         continue;
       }
     }
@@ -113,16 +153,19 @@ class TransactionService {
     return reservationsByDate;
   }
 
+  /// تصفية المعاملات
   List<Map<String, dynamic>> filterTransactions({
     required List<Map<String, dynamic>> transactions,
     DateTime? selectedDate,
     String? searchQuery,
+    String? statusFilter,
   }) {
     return transactions.where((transaction) {
       bool matchesDate = true;
       bool matchesSearch = true;
+      bool matchesStatus = true;
 
-      // Filter by date
+      // تصفية حسب التاريخ
       if (selectedDate != null) {
         try {
           final transactionDate = DateTime.parse(transaction['date']);
@@ -134,7 +177,7 @@ class TransactionService {
         }
       }
 
-      // Filter by search query
+      // تصفية حسب البحث
       if (searchQuery != null && searchQuery.isNotEmpty) {
         final customerName =
             transaction['user_name']?.toString().toLowerCase() ?? '';
@@ -146,7 +189,18 @@ class TransactionService {
             customerName.contains(query) || serviceName.contains(query);
       }
 
-      return matchesDate && matchesSearch;
+      // تصفية حسب الحالة
+      if (statusFilter != null && statusFilter.isNotEmpty) {
+        matchesStatus = transaction['status']?.toString() == statusFilter;
+      }
+
+      return matchesDate && matchesSearch && matchesStatus;
     }).toList();
+  }
+
+  /// مسح كاش المعاملات
+  void clearTransactionsCache(String carWashId) {
+    _cache.clearDataCache(_getTransactionsCacheKey(carWashId));
+    AppLogger.info('تم مسح كاش المعاملات للمغسلة: $carWashId');
   }
 }
