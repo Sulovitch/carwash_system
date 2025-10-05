@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../services/reservation_service.dart';
 import '../../services/carwash_service.dart';
 import '../../utils/error_handler.dart';
@@ -40,7 +41,7 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
 
       if (response.success && response.data != null) {
         final sortedReservations = response.data!;
-        // Enrich with car wash name/image if missing
+
         try {
           final cwResp = await _carWashService.fetchCarWashes();
           if (cwResp.success && cwResp.data != null) {
@@ -49,15 +50,22 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
               for (final cw in carWashes) (cw['id']?.toString() ?? ''): cw,
             };
             for (final r in sortedReservations) {
-              final String cwId = (r['car_wash_id'] ?? r['carWashId'] ?? (r['car_wash'] is Map ? r['car_wash']['id'] : null))?.toString() ?? '';
+              final String cwId = (r['car_wash_id'] ??
+                          r['carWashId'] ??
+                          (r['car_wash'] is Map ? r['car_wash']['id'] : null))
+                      ?.toString() ??
+                  '';
               if (cwId.isNotEmpty && byId.containsKey(cwId)) {
                 final cw = byId[cwId]!;
                 r['car_wash_name'] = r['car_wash_name'] ?? cw['name'];
-                r['car_wash_profile_image'] = r['car_wash_profile_image'] ?? cw['profile_image'];
+                r['car_wash_profile_image'] =
+                    r['car_wash_profile_image'] ?? cw['profile_image'];
+                r['car_wash_phone'] = r['car_wash_phone'] ?? cw['phone'];
               }
             }
           }
         } catch (_) {}
+
         sortedReservations.sort((a, b) {
           final dateA = DateTime.tryParse(a['date'] ?? '') ?? DateTime(1970);
           final dateB = DateTime.tryParse(b['date'] ?? '') ?? DateTime(1970);
@@ -137,10 +145,7 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
   }
 
   Future<void> _undoCancellation(
-    int index,
-    int reservationId,
-    String previousStatus,
-  ) async {
+      int index, int reservationId, String previousStatus) async {
     try {
       final response = await _reservationService.updateReservationStatus(
         reservationId: reservationId,
@@ -159,6 +164,50 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
       if (!mounted) return;
       ErrorHandler.showErrorSnackBar(context, e);
     }
+  }
+
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    // تنظيف رقم الهاتف من المسافات والرموز غير الضرورية
+    final cleanNumber = phoneNumber.trim().replaceAll(RegExp(r'\s+'), '');
+
+    if (cleanNumber.isEmpty) {
+      if (mounted) {
+        ErrorHandler.showErrorSnackBar(context, 'رقم الهاتف غير متوفر');
+      }
+      return;
+    }
+
+    final Uri launchUri = Uri(
+      scheme: 'tel',
+      path: cleanNumber,
+    );
+
+    try {
+      // استخدم LaunchMode.externalApplication بشكل صريح
+      final bool launched = await launchUrl(
+        launchUri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched && mounted) {
+        ErrorHandler.showErrorSnackBar(
+          context,
+          'لا يوجد تطبيق هاتف متاح على هذا الجهاز',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ErrorHandler.showErrorSnackBar(
+          context,
+          'خطأ في إجراء المكالمة: ${e.toString()}',
+        );
+      }
+    }
+  }
+
+  void _openChat(Map<String, dynamic> reservation) {
+    // TODO: فتح صفحة الدردشة
+    ErrorHandler.showInfoSnackBar(context, 'ميزة الدردشة قريباً');
   }
 
   Color _getStatusColor(String status) {
@@ -287,11 +336,7 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(
-              Icons.event_busy,
-              size: 80,
-              color: Colors.grey[400],
-            ),
+            Icon(Icons.event_busy, size: 80, color: Colors.grey[400]),
             const SizedBox(height: AppSpacing.medium),
             Text(
               'لا توجد حجوزات حالياً',
@@ -304,10 +349,7 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
             const SizedBox(height: AppSpacing.small),
             Text(
               'قم بالحجز من الصفحة الرئيسية',
-              style: TextStyle(
-                fontSize: 14,
-                color: Colors.grey[500],
-              ),
+              style: TextStyle(fontSize: 14, color: Colors.grey[500]),
             ),
           ],
         ),
@@ -322,7 +364,8 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
         itemBuilder: (context, index) {
           final reservation = _reservations[index];
           final status = reservation['status']?.toString() ?? 'Pending';
-          final canCancel = status == 'Pending' || status == 'Approved';
+          final canCancel = status == 'Pending';
+          final phoneNumber = reservation['car_wash_phone']?.toString() ?? '';
 
           return Container(
             margin: const EdgeInsets.only(bottom: 16),
@@ -366,7 +409,8 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
                                     height: 22,
                                     decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: Colors.blueAccent.withOpacity(0.08),
+                                      color:
+                                          Colors.blueAccent.withOpacity(0.08),
                                     ),
                                     clipBehavior: Clip.antiAlias,
                                     child: _buildCarWashAvatar(reservation),
@@ -375,7 +419,8 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
                                   Expanded(
                                     child: Builder(
                                       builder: (_) {
-                                        final name = _getCarWashName(reservation);
+                                        final name =
+                                            _getCarWashName(reservation);
                                         return Text(
                                           name.isEmpty ? '-' : name,
                                           style: TextStyle(
@@ -394,32 +439,22 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
                               const SizedBox(height: 6),
                               Row(
                                 children: [
-                                  Icon(
-                                    Icons.calendar_today,
-                                    size: 14,
-                                    color: Colors.grey[600],
-                                  ),
+                                  Icon(Icons.calendar_today,
+                                      size: 14, color: Colors.grey[600]),
                                   const SizedBox(width: 4),
                                   Text(
                                     reservation['date'] ?? '',
                                     style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey[600],
-                                    ),
+                                        fontSize: 13, color: Colors.grey[600]),
                                   ),
                                   const SizedBox(width: 12),
-                                  Icon(
-                                    Icons.access_time,
-                                    size: 14,
-                                    color: Colors.grey[600],
-                                  ),
+                                  Icon(Icons.access_time,
+                                      size: 14, color: Colors.grey[600]),
                                   const SizedBox(width: 4),
                                   Text(
                                     reservation['time'] ?? '',
                                     style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey[600],
-                                    ),
+                                        fontSize: 13, color: Colors.grey[600]),
                                   ),
                                 ],
                               ),
@@ -428,9 +463,7 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
                         ),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 8,
-                          ),
+                              horizontal: 12, vertical: 8),
                           decoration: BoxDecoration(
                             color: _getStatusColor(status),
                             borderRadius: BorderRadius.circular(20),
@@ -445,11 +478,8 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                _getStatusIcon(status),
-                                color: Colors.white,
-                                size: 16,
-                              ),
+                              Icon(_getStatusIcon(status),
+                                  color: Colors.white, size: 16),
                               const SizedBox(width: 6),
                               Text(
                                 _getStatusText(status),
@@ -487,11 +517,8 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
                                   color: Colors.blue[50],
                                   borderRadius: BorderRadius.circular(10),
                                 ),
-                                child: const Icon(
-                                  Icons.directions_car,
-                                  color: Colors.blue,
-                                  size: 24,
-                                ),
+                                child: const Icon(Icons.directions_car,
+                                    color: Colors.blue, size: 24),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -508,9 +535,8 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
                                     Text(
                                       'سنة: ${reservation['car_year'] ?? 'غير محدد'}',
                                       style: TextStyle(
-                                        fontSize: 13,
-                                        color: Colors.grey[600],
-                                      ),
+                                          fontSize: 13,
+                                          color: Colors.grey[600]),
                                     ),
                                   ],
                                 ),
@@ -521,15 +547,62 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
 
                         if (reservation['price'] != null) ...[
                           const SizedBox(height: 8),
-                          _buildInfoRow(
-                            Icons.payments,
-                            'السعر',
-                            '${reservation['price']} ريال',
-                          ),
+                          _buildInfoRow(Icons.payments, 'السعر',
+                              '${reservation['price']} ريال'),
                         ],
 
+                        const SizedBox(height: 16),
+
+                        // أزرار الإجراءات
+                        Row(
+                          children: [
+                            // زر الاتصال
+                            if (phoneNumber.isNotEmpty)
+                              Expanded(
+                                child: OutlinedButton.icon(
+                                  onPressed: () => _makePhoneCall(phoneNumber),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: Colors.green[700],
+                                    side: BorderSide(color: Colors.green[300]!),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                  ),
+                                  icon: const Icon(Icons.phone, size: 18),
+                                  label: const Text('اتصال',
+                                      style: TextStyle(fontSize: 13)),
+                                ),
+                              ),
+
+                            if (phoneNumber.isNotEmpty)
+                              const SizedBox(width: 8),
+
+                            // زر الدردشة
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                onPressed: () => _openChat(reservation),
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: Colors.blue[700],
+                                  side: BorderSide(color: Colors.blue[300]!),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                ),
+                                icon: const Icon(Icons.chat_bubble_outline,
+                                    size: 18),
+                                label: const Text('دردشة',
+                                    style: TextStyle(fontSize: 13)),
+                              ),
+                            ),
+                          ],
+                        ),
+
                         if (canCancel) ...[
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 8),
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
@@ -549,9 +622,7 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
                               label: const Text(
                                 'إلغاء الحجز',
                                 style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 15,
-                                ),
+                                    fontWeight: FontWeight.bold, fontSize: 15),
                               ),
                             ),
                           ),
@@ -573,21 +644,12 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
       children: [
         Icon(icon, size: 18, color: Colors.grey[600]),
         const SizedBox(width: 8),
-        Text(
-          '$label: ',
-          style: TextStyle(
-            color: Colors.grey[600],
-            fontSize: 14,
-          ),
-        ),
+        Text('$label: ',
+            style: TextStyle(color: Colors.grey[600], fontSize: 14)),
         Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          child: Text(value,
+              style:
+                  const TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
         ),
       ],
     );
