@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../services/reservation_service.dart';
@@ -17,19 +18,40 @@ class UserReservationsTab extends StatefulWidget {
   State<UserReservationsTab> createState() => _UserReservationsTabState();
 }
 
-class _UserReservationsTabState extends State<UserReservationsTab> {
+class _UserReservationsTabState extends State<UserReservationsTab>
+    with AutomaticKeepAliveClientMixin, WidgetsBindingObserver {
   final _reservationService = ReservationService();
   final _carWashService = CarWashService();
   List<Map<String, dynamic>> _reservations = [];
   bool _isLoading = true;
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadReservations();
   }
 
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // تحديث عند العودة للتطبيق
+      _loadReservations();
+    }
+  }
+
   Future<void> _loadReservations() async {
+    if (!mounted) return;
+
     setState(() => _isLoading = true);
 
     try {
@@ -40,7 +62,7 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
       if (!mounted) return;
 
       if (response.success && response.data != null) {
-        final sortedReservations = response.data!;
+        final reservations = response.data!;
 
         try {
           final cwResp = await _carWashService.fetchCarWashes();
@@ -49,7 +71,7 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
             final Map<String, Map<String, dynamic>> byId = {
               for (final cw in carWashes) (cw['id']?.toString() ?? ''): cw,
             };
-            for (final r in sortedReservations) {
+            for (final r in reservations) {
               final String cwId = (r['car_wash_id'] ??
                           r['carWashId'] ??
                           (r['car_wash'] is Map ? r['car_wash']['id'] : null))
@@ -66,19 +88,37 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
           }
         } catch (_) {}
 
-        sortedReservations.sort((a, b) {
+        // ترتيب من الأحدث للأقدم
+        reservations.sort((a, b) {
+          // أولاً حسب التاريخ
           final dateA = DateTime.tryParse(a['date'] ?? '') ?? DateTime(1970);
           final dateB = DateTime.tryParse(b['date'] ?? '') ?? DateTime(1970);
-          return dateB.compareTo(dateA);
+          final dateCompare = dateB.compareTo(dateA);
+
+          if (dateCompare != 0) return dateCompare;
+
+          // ثانياً حسب الوقت
+          final timeA = a['time']?.toString() ?? '';
+          final timeB = b['time']?.toString() ?? '';
+          final timeCompare = timeB.compareTo(timeA);
+
+          if (timeCompare != 0) return timeCompare;
+
+          // أخيراً حسب ID الحجز
+          final idA = int.tryParse(a['reservation_id']?.toString() ?? '0') ?? 0;
+          final idB = int.tryParse(b['reservation_id']?.toString() ?? '0') ?? 0;
+          return idB.compareTo(idA);
         });
 
         setState(() {
-          _reservations = sortedReservations;
+          _reservations = reservations;
           _isLoading = false;
         });
       } else {
         setState(() => _isLoading = false);
-        ErrorHandler.showErrorSnackBar(context, response.message);
+        if (response.message != null) {
+          ErrorHandler.showErrorSnackBar(context, response.message);
+        }
       }
     } catch (e) {
       if (!mounted) return;
@@ -167,7 +207,6 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
   }
 
   Future<void> _makePhoneCall(String phoneNumber) async {
-    // تنظيف رقم الهاتف من المسافات والرموز غير الضرورية
     final cleanNumber = phoneNumber.trim().replaceAll(RegExp(r'\s+'), '');
 
     if (cleanNumber.isEmpty) {
@@ -183,7 +222,6 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
     );
 
     try {
-      // استخدم LaunchMode.externalApplication بشكل صريح
       final bool launched = await launchUrl(
         launchUri,
         mode: LaunchMode.externalApplication,
@@ -206,7 +244,6 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
   }
 
   void _openChat(Map<String, dynamic> reservation) {
-    // TODO: فتح صفحة الدردشة
     ErrorHandler.showInfoSnackBar(context, 'ميزة الدردشة قريباً');
   }
 
@@ -327,6 +364,8 @@ class _UserReservationsTabState extends State<UserReservationsTab> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // مهم للـ AutomaticKeepAliveClientMixin
+
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }

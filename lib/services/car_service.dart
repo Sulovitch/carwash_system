@@ -57,19 +57,41 @@ class CarService {
 
         if (data['success'] == true && data['cars'] is List) {
           final cars = (data['cars'] as List).map((carData) {
+            String plateNumbers = carData['plateNumbers']?.toString() ?? '';
+            String plateLetters = carData['plateLetters']?.toString() ?? '';
+
+            // تحويل إلى List<String> (بدون null)
+            List<String> arabicNums = [];
+            List<String> latinNums = [];
+            List<String> arabicLetters = [];
+            List<String> latinLetters = [];
+
+            if (plateNumbers.length >= 8) {
+              arabicNums = plateNumbers.substring(0, 4).split('');
+              latinNums = plateNumbers.substring(4, 8).split('');
+            } else {
+              // استخدام قيم فارغة بدلاً من null
+              arabicNums = ['', '', '', ''];
+              latinNums = ['', '', '', ''];
+            }
+
+            if (plateLetters.length >= 6) {
+              arabicLetters = plateLetters.substring(0, 3).split('');
+              latinLetters = plateLetters.substring(3, 6).split('');
+            } else {
+              arabicLetters = ['', '', ''];
+              latinLetters = ['', '', ''];
+            }
+
             return Car(
               carId: carData['Car_id'],
               selectedMake: carData['Car_make']?.toString(),
               selectedModel: carData['Car_model']?.toString(),
               selectedYear: carData['Car_year']?.toString(),
-              selectedArabicNumbers:
-                  carData['plateNumbers']?.substring(0, 4).split('') ?? [],
-              selectedLatinNumbers:
-                  carData['plateNumbers']?.substring(4).split('') ?? [],
-              selectedArabicLetters:
-                  carData['plateLetters']?.substring(0, 3).split('') ?? [],
-              selectedLatinLetters:
-                  carData['plateLetters']?.substring(3).split('') ?? [],
+              selectedArabicNumbers: arabicNums,
+              selectedLatinNumbers: latinNums,
+              selectedArabicLetters: arabicLetters,
+              selectedLatinLetters: latinLetters,
             );
           }).toList();
 
@@ -81,7 +103,7 @@ class CarService {
         return ApiResponse.error('خطأ في الاتصال: ${response.statusCode}');
       }
     } catch (e) {
-      return ApiResponse.error(e.toString());
+      return ApiResponse.error('خطأ: ${e.toString()}');
     }
   }
 
@@ -102,6 +124,46 @@ class CarService {
           return ApiResponse.success(true, 'تم حذف السيارة بنجاح');
         } else {
           return ApiResponse.error(data['message'] ?? 'فشل في حذف السيارة');
+        }
+      } else {
+        return ApiResponse.error('خطأ في الاتصال: ${response.statusCode}');
+      }
+    } catch (e) {
+      return ApiResponse.error(e.toString());
+    }
+  }
+
+  Future<ApiResponse<bool>> updateCar({
+    required int carId,
+    required String make,
+    required String model,
+    required String year,
+    required String plateNumbers,
+    required String plateLetters,
+  }) async {
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConfig.carEndpoint),
+        body: {
+          'action': 'update',
+          'Car_id': carId.toString(),
+          'car_make': make,
+          'car_model': model,
+          'car_year': year,
+          'plateNumbers': plateNumbers,
+          'plateLetters': plateLetters,
+        },
+      ).timeout(ApiConfig.connectionTimeout);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data['success'] == true) {
+          return ApiResponse.success(
+            true,
+            'تم تحديث السيارة بنجاح',
+          );
+        } else {
+          return ApiResponse.error(data['message'] ?? 'فشل في تحديث السيارة');
         }
       } else {
         return ApiResponse.error('خطأ في الاتصال: ${response.statusCode}');

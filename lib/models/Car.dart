@@ -4,20 +4,20 @@ class Car {
   final String? selectedMake;
   final String? selectedModel;
   final String? selectedYear;
-  final List<String> selectedArabicNumbers;
-  final List<String> selectedLatinNumbers;
-  final List<String> selectedArabicLetters;
-  final List<String> selectedLatinLetters;
+  final List<String?> selectedArabicNumbers;
+  final List<String?> selectedLatinNumbers;
+  final List<String?> selectedArabicLetters;
+  final List<String?> selectedLatinLetters;
 
   Car({
     required this.carId,
     this.selectedMake,
     this.selectedModel,
     this.selectedYear,
-    this.selectedArabicNumbers = const [],
-    this.selectedLatinNumbers = const [],
-    this.selectedArabicLetters = const [],
-    this.selectedLatinLetters = const [],
+    required this.selectedArabicNumbers,
+    required this.selectedLatinNumbers,
+    required this.selectedArabicLetters,
+    required this.selectedLatinLetters,
   });
 
   String get licensePlate {
