@@ -1,3 +1,4 @@
+import 'package:app/screens/welcome_screen.dart';
 import 'package:flutter/material.dart';
 import 'owner/owner_services_tab.dart';
 import 'owner/owner_receptionists_tab.dart';
@@ -269,7 +270,7 @@ class _OwnerScreenState extends State<OwnerScreen> {
               Navigator.pop(context);
               Navigator.pushNamedAndRemoveUntil(
                 context,
-                'welcome_screen',
+                WelcomeScreen.routeName,
                 (route) => false,
               );
             },

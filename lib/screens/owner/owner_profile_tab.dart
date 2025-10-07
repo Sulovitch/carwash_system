@@ -227,9 +227,6 @@ class _OwnerProfileTabState extends State<OwnerProfileTab> {
           // الاشتراك الشهري
           _buildSubscriptionCard(),
           const SizedBox(height: AppSpacing.large),
-
-          // إحصائيات سريعة
-          _buildQuickStats(),
         ],
       ),
     );
@@ -614,79 +611,6 @@ class _OwnerProfileTabState extends State<OwnerProfileTab> {
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildQuickStats() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'إحصائيات سريعة',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child:
-                    _buildStatItem('الخدمات', '12', Icons.build, Colors.blue),
-              ),
-              Container(width: 1, height: 60, color: Colors.grey.shade200),
-              Expanded(
-                child:
-                    _buildStatItem('الموظفين', '5', Icons.people, Colors.green),
-              ),
-              Container(width: 1, height: 60, color: Colors.grey.shade200),
-              Expanded(
-                child:
-                    _buildStatItem('التقييم', '4.8', Icons.star, Colors.amber),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatItem(
-      String label, String value, IconData icon, Color color) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 28),
-        const SizedBox(height: 8),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-        Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            color: Colors.grey.shade600,
-          ),
-        ),
-      ],
     );
   }
 

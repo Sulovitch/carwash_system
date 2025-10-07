@@ -1,3 +1,4 @@
+import 'package:app/screens/welcome_screen.dart';
 import 'package:flutter/material.dart';
 import 'user/user_home_tab.dart';
 import 'user/user_profile_tab.dart';
@@ -117,7 +118,7 @@ class _UserScreenState extends State<UserScreen> {
                         Navigator.pop(context); // إغلاق الـ dialog
                         Navigator.pushNamedAndRemoveUntil(
                           context,
-                          'welcome_screen',
+                          WelcomeScreen.routeName,
                           (route) => false,
                         );
                       },
