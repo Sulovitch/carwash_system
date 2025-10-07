@@ -32,6 +32,37 @@ class TransactionService {
     }
   }
 
+  // Add this method to update reservation status
+  Future<ApiResponse<void>> updateTransactionStatus(
+    String reservationId,
+    String newStatus,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse(ApiConfig.transactionEndpoint),
+        body: {
+          'reservation_id': reservationId,
+          'status': newStatus,
+        },
+      ).timeout(ApiConfig.connectionTimeout);
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+
+        if (data['success'] == true) {
+          return ApiResponse.success(null);
+        } else {
+          return ApiResponse.error(
+              data['message'] ?? 'فشل في تحديث حالة الحجز');
+        }
+      } else {
+        return ApiResponse.error('خطأ في الاتصال: ${response.statusCode}');
+      }
+    } catch (e) {
+      return ApiResponse.error(e.toString());
+    }
+  }
+
   Map<String, dynamic> calculateStatistics(
     List<Map<String, dynamic>> transactions,
   ) {
@@ -42,17 +73,17 @@ class TransactionService {
     int canceledReservations = 0;
 
     for (var transaction in transactions) {
-      final status = transaction['status']?.toString() ?? '';
+      final status = transaction['status']?.toString().toLowerCase() ?? '';
       final price =
           double.tryParse(transaction['service_price']?.toString() ?? '0') ??
               0.0;
 
-      if (status == 'Completed') {
+      if (status == 'approved') {
         completedReservations++;
         totalEarnings += price;
-      } else if (status == 'Pending') {
+      } else if (status == 'pending') {
         pendingReservations++;
-      } else if (status == 'Canceled') {
+      } else if (status == 'cancelled') {
         canceledReservations++;
       }
     }
@@ -72,7 +103,7 @@ class TransactionService {
     Map<DateTime, double> earningsByDate = {};
 
     for (var transaction in transactions) {
-      if (transaction['status'] == 'Completed') {
+      if (transaction['status']?.toString().toLowerCase() == 'approved') {
         try {
           final date = DateTime.parse(transaction['date']);
           final normalizedDate = DateTime(date.year, date.month, date.day);

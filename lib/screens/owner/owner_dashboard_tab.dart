@@ -6,15 +6,18 @@ import '../../services/service_service.dart';
 import '../../utils/error_handler.dart';
 import '../../utils/date_formatter.dart';
 import 'package:fl_chart/fl_chart.dart';
+import 'owner_reservations_tab.dart';
 
 class OwnerDashboardTab extends StatefulWidget {
   final Map<String, dynamic> carWashInfo;
   final VoidCallback onRefresh;
+  final Function(int)? onNavigateToTab; // إضافة callback للتنقل
 
   const OwnerDashboardTab({
     Key? key,
     required this.carWashInfo,
     required this.onRefresh,
+    this.onNavigateToTab,
   }) : super(key: key);
 
   @override
@@ -119,6 +122,13 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab>
         setState(() => _isLoading = false);
         ErrorHandler.showErrorSnackBar(context, e);
       }
+    }
+  }
+
+  // التنقل إلى تاب معين
+  void _navigateToTab(int tabIndex) {
+    if (widget.onNavigateToTab != null) {
+      widget.onNavigateToTab!(tabIndex);
     }
   }
 
@@ -296,28 +306,38 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab>
           Icons.event_note,
           Colors.blue,
           '${_statistics['totalReservations'] ?? 0}',
-          onTap: () {},
+          onTap: () {
+            // التنقل إلى صفحة الحجوزات
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => OwnerReservationsTab(
+                  carWashId: widget.carWashInfo['carWashId']?.toString() ?? '',
+                ),
+              ),
+            );
+          },
         ),
         _buildQuickActionCard(
           'الخدمات',
           Icons.build_circle,
           Colors.orange,
           '$_totalServices',
-          onTap: () {},
+          onTap: () => _navigateToTab(2),
         ),
         _buildQuickActionCard(
           'الموظفين',
           Icons.people,
           Colors.green,
           '$_totalReceptionists',
-          onTap: () {},
+          onTap: () => _navigateToTab(3),
         ),
         _buildQuickActionCard(
           'التحليلات',
           Icons.analytics,
           Colors.purple,
           'عرض',
-          onTap: () {},
+          onTap: () => _navigateToTab(1),
         ),
       ],
     );
@@ -529,7 +549,10 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab>
                 ],
               ),
               TextButton(
-                onPressed: () {},
+                onPressed: () {
+                  // الانتقال إلى تاب التحليلات
+                  DefaultTabController.of(context).animateTo(1);
+                },
                 child: const Text('عرض التفاصيل'),
               ),
             ],
@@ -818,7 +841,18 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab>
                   ],
                 ),
                 TextButton(
-                  onPressed: () {},
+                  onPressed: () {
+                    // فتح صفحة الحجوزات
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => OwnerReservationsTab(
+                          carWashId:
+                              widget.carWashInfo['carWashId']?.toString() ?? '',
+                        ),
+                      ),
+                    );
+                  },
                   child: const Text('عرض الكل'),
                 ),
               ],
@@ -978,7 +1012,7 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab>
             'أضف أو عدل الخدمات المتاحة',
             Icons.build_circle,
             Colors.blue,
-            onTap: () {},
+            onTap: () => _navigateToTab(2),
           ),
           const SizedBox(height: 16),
           _buildQuickLinkItem(
@@ -986,7 +1020,7 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab>
             'أضف أو عدل بيانات الموظفين',
             Icons.people,
             Colors.green,
-            onTap: () {},
+            onTap: () => _navigateToTab(3),
           ),
           const SizedBox(height: 16),
           _buildQuickLinkItem(
@@ -994,7 +1028,7 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab>
             'عرض التحليلات والتقارير التفصيلية',
             Icons.assessment,
             Colors.purple,
-            onTap: () {},
+            onTap: () => _navigateToTab(1),
           ),
           const SizedBox(height: 16),
           _buildQuickLinkItem(
@@ -1002,7 +1036,7 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab>
             'تعديل إعدادات المغسلة',
             Icons.settings,
             Colors.orange,
-            onTap: () {},
+            onTap: () => _navigateToTab(4),
           ),
         ],
       ),

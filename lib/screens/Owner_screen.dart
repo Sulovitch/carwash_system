@@ -102,6 +102,11 @@ class _OwnerScreenState extends State<OwnerScreen> {
       OwnerDashboardTab(
         carWashInfo: _carWashInfo,
         onRefresh: () => setState(() {}),
+        onNavigateToTab: (index) {
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
       ),
       OwnerAnalyticsTab(carWashId: carWashId),
       OwnerServicesTab(carWashId: carWashId),
