@@ -27,7 +27,7 @@ class _OwnerServicesTabState extends State<OwnerServicesTab> {
   final _priceController = TextEditingController();
 
   List<Service> _services = [];
-  String? _imagePath;
+  File? _selectedImage;
   int? _editingIndex;
   bool _isLoading = true;
   bool _isSaving = false;
@@ -72,19 +72,343 @@ class _OwnerServicesTabState extends State<OwnerServicesTab> {
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final image = await picker.pickImage(source: ImageSource.gallery);
+    final image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1200,
+      maxHeight: 1200,
+      imageQuality: 85,
+    );
 
     if (image != null) {
       setState(() {
-        _imagePath = image.path;
+        _selectedImage = File(image.path);
       });
     }
+  }
+
+  void _showAddEditDialog([int? index]) {
+    if (index != null) {
+      final service = _services[index];
+      _editingIndex = index;
+      _nameController.text = service.name;
+      _descriptionController.text = service.description;
+      _priceController.text = service.price.toString();
+      _selectedImage = null;
+    } else {
+      _editingIndex = null;
+      _clearForm();
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) {
+          return Container(
+            height: MediaQuery.of(context).size.height * 0.85,
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            child: Column(
+              children: [
+                // Handle
+                Container(
+                  margin: const EdgeInsets.only(top: 12),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+
+                // Header
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(
+                          _editingIndex != null ? Icons.edit : Icons.add,
+                          color: AppColors.primary,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Text(
+                        _editingIndex != null
+                            ? 'تعديل الخدمة'
+                            : 'إضافة خدمة جديدة',
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const Divider(height: 1),
+
+                // Form
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(20),
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // اسم الخدمة
+                          _buildInputField(
+                            controller: _nameController,
+                            label: 'اسم الخدمة',
+                            hint: 'مثال: غسيل خارجي',
+                            icon: Icons.label,
+                            validator: AppValidators.required,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // الوصف
+                          _buildInputField(
+                            controller: _descriptionController,
+                            label: 'الوصف',
+                            hint: 'وصف تفصيلي للخدمة',
+                            icon: Icons.description,
+                            maxLines: 3,
+                            validator: AppValidators.required,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // السعر
+                          _buildInputField(
+                            controller: _priceController,
+                            label: 'السعر (ريال)',
+                            hint: '0.00',
+                            icon: Icons.attach_money,
+                            keyboardType:
+                                TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                  RegExp(r'^\d+\.?\d{0,2}')),
+                            ],
+                            validator: (value) {
+                              if (value == null || value.isEmpty) {
+                                return AppStrings.requiredField;
+                              }
+                              if (double.tryParse(value) == null) {
+                                return 'يرجى إدخال سعر صحيح';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 20),
+
+                          // اختيار الصورة
+                          const Text(
+                            'صورة الخدمة',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: () async {
+                              await _pickImage();
+                              setModalState(() {});
+                            },
+                            child: Container(
+                              height: 180,
+                              decoration: BoxDecoration(
+                                color: Colors.grey[100],
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: _selectedImage != null
+                                      ? AppColors.primary
+                                      : Colors.grey[300]!,
+                                  width: 2,
+                                ),
+                              ),
+                              child: _selectedImage != null
+                                  ? Stack(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                          child: Image.file(
+                                            _selectedImage!,
+                                            width: double.infinity,
+                                            height: double.infinity,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 8,
+                                          right: 8,
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              color: Colors.black54,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                            child: IconButton(
+                                              icon: const Icon(Icons.close,
+                                                  color: Colors.white),
+                                              onPressed: () {
+                                                setState(() {
+                                                  _selectedImage = null;
+                                                });
+                                                setModalState(() {});
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.add_photo_alternate,
+                                          size: 48,
+                                          color: Colors.grey[400],
+                                        ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          'اضغط لاختيار صورة',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            color: Colors.grey[600],
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+
+                // Buttons
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 10,
+                        offset: const Offset(0, -5),
+                      ),
+                    ],
+                  ),
+                  child: SafeArea(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.grey[700],
+                              side: BorderSide(color: Colors.grey[300]!),
+                              minimumSize: const Size(0, 54),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'إلغاء',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton(
+                            onPressed: _isSaving
+                                ? null
+                                : () async {
+                                    await _saveService();
+                                    if (mounted) {
+                                      Navigator.pop(context);
+                                    }
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              disabledBackgroundColor: Colors.grey[300],
+                              minimumSize: const Size(0, 54),
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: _isSaving
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        _editingIndex != null
+                                            ? Icons.save
+                                            : Icons.add,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        _editingIndex != null ? 'حفظ' : 'إضافة',
+                                        style: const TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    ).then((_) {
+      _clearForm();
+    });
   }
 
   Future<void> _saveService() async {
     if (!_formKey.currentState!.validate()) return;
 
-    if (_imagePath == null && _editingIndex == null) {
+    if (_selectedImage == null && _editingIndex == null) {
       ErrorHandler.showErrorSnackBar(context, 'يرجى اختيار صورة للخدمة');
       return;
     }
@@ -97,14 +421,13 @@ class _OwnerServicesTabState extends State<OwnerServicesTab> {
       final price = double.tryParse(_priceController.text) ?? 0.0;
 
       if (_editingIndex != null) {
-        // تحديث خدمة موجودة
         final service = _services[_editingIndex!];
         final response = await _serviceService.updateService(
           serviceId: service.id!,
           name: name,
           description: description,
           price: price,
-          imagePath: _imagePath,
+          imagePath: _selectedImage?.path,
         );
 
         if (!mounted) return;
@@ -112,20 +435,18 @@ class _OwnerServicesTabState extends State<OwnerServicesTab> {
         if (response.success && response.data != null) {
           setState(() {
             _services[_editingIndex!] = response.data!;
-            _clearForm();
           });
           ErrorHandler.showSuccessSnackBar(context, 'تم تحديث الخدمة بنجاح');
         } else {
           ErrorHandler.showErrorSnackBar(context, response.message);
         }
       } else {
-        // إضافة خدمة جديدة
         final response = await _serviceService.addService(
           carWashId: widget.carWashId,
           name: name,
           description: description,
           price: price,
-          imagePath: _imagePath!,
+          imagePath: _selectedImage!.path,
         );
 
         if (!mounted) return;
@@ -133,7 +454,6 @@ class _OwnerServicesTabState extends State<OwnerServicesTab> {
         if (response.success && response.data != null) {
           setState(() {
             _services.add(response.data!);
-            _clearForm();
           });
           ErrorHandler.showSuccessSnackBar(context, 'تم إضافة الخدمة بنجاح');
         } else {
@@ -150,17 +470,6 @@ class _OwnerServicesTabState extends State<OwnerServicesTab> {
     }
   }
 
-  void _editService(int index) {
-    final service = _services[index];
-    setState(() {
-      _editingIndex = index;
-      _nameController.text = service.name;
-      _descriptionController.text = service.description;
-      _priceController.text = service.price.toString();
-      _imagePath = null;
-    });
-  }
-
   Future<void> _deleteService(int index) async {
     final service = _services[index];
 
@@ -168,7 +477,7 @@ class _OwnerServicesTabState extends State<OwnerServicesTab> {
       context,
       title: 'حذف الخدمة',
       content: 'هل أنت متأكد من حذف خدمة "${service.name}"؟',
-      confirmText: 'نعم، حذف',
+      confirmText: 'نعم، احذف',
       cancelText: 'إلغاء',
     );
 
@@ -198,348 +507,360 @@ class _OwnerServicesTabState extends State<OwnerServicesTab> {
     _nameController.clear();
     _descriptionController.clear();
     _priceController.clear();
-    setState(() {
-      _imagePath = null;
-      _editingIndex = null;
-    });
+    _selectedImage = null;
+    _editingIndex = null;
   }
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // قائمة الخدمات
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : _services.isEmpty
-                  ? Center(
+    return Container(
+      color: Colors.grey[50],
+      child: Column(
+        children: [
+          // Header
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.primary.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.build_circle,
+                        color: AppColors.primary,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
                       child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Icon(
-                            Icons.build_circle,
-                            size: 80,
-                            color: Colors.grey[400],
-                          ),
-                          const SizedBox(height: AppSpacing.medium),
-                          Text(
-                            'لا توجد خدمات',
+                          const Text(
+                            'الخدمات',
                             style: TextStyle(
-                              fontSize: 18,
-                              color: Colors.grey[600],
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          const SizedBox(height: AppSpacing.small),
                           Text(
-                            'أضف خدمتك الأولى باستخدام النموذج أدناه',
+                            '${_services.length} خدمة متاحة',
                             style: TextStyle(
                               fontSize: 14,
-                              color: Colors.grey[500],
+                              color: Colors.grey[600],
                             ),
                           ),
                         ],
                       ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadServices,
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(AppSpacing.medium),
-                        itemCount: _services.length,
-                        itemBuilder: (context, index) {
-                          final service = _services[index];
-                          final isEditing = _editingIndex == index;
-
-                          return Card(
-                            elevation: isEditing ? 4 : 2,
-                            margin: const EdgeInsets.only(
-                              bottom: AppSpacing.medium,
-                            ),
-                            color: isEditing ? Colors.blue[50] : null,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(
-                                AppSizes.cardBorderRadius,
-                              ),
-                              side: isEditing
-                                  ? BorderSide(color: Colors.blue, width: 2)
-                                  : BorderSide.none,
-                            ),
-                            child: Padding(
-                              padding: const EdgeInsets.all(AppSpacing.medium),
-                              child: Row(
-                                children: [
-                                  // صورة الخدمة
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(8),
-                                    child: service.imageUrl != null
-                                        ? Image.network(
-                                            service.imageUrl!,
-                                            width: 100,
-                                            height: 100,
-                                            fit: BoxFit.cover,
-                                            errorBuilder:
-                                                (context, error, trace) {
-                                              return Container(
-                                                width: 100,
-                                                height: 100,
-                                                color: Colors.grey[200],
-                                                child: const Icon(
-                                                  Icons.broken_image,
-                                                  size: 40,
-                                                ),
-                                              );
-                                            },
-                                          )
-                                        : Container(
-                                            width: 100,
-                                            height: 100,
-                                            color: Colors.grey[200],
-                                            child: const Icon(
-                                              Icons.image,
-                                              size: 40,
-                                            ),
-                                          ),
-                                  ),
-                                  const SizedBox(width: AppSpacing.medium),
-
-                                  // معلومات الخدمة
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          service.name,
-                                          style: const TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
-                                        const SizedBox(height: AppSpacing.xs),
-                                        Text(
-                                          service.description,
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            color: Colors.grey[700],
-                                          ),
-                                          maxLines: 2,
-                                          overflow: TextOverflow.ellipsis,
-                                        ),
-                                        const SizedBox(height: AppSpacing.xs),
-                                        Text(
-                                          '${service.price.toStringAsFixed(2)} ريال',
-                                          style: const TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            color: AppColors.success,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-
-                                  // أزرار التحكم
-                                  Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      IconButton(
-                                        icon: Icon(
-                                          isEditing ? Icons.check : Icons.edit,
-                                          color: isEditing
-                                              ? AppColors.success
-                                              : AppColors.info,
-                                        ),
-                                        onPressed: () => _editService(index),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(
-                                          Icons.delete,
-                                          color: AppColors.error,
-                                        ),
-                                        onPressed: () => _deleteService(index),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-        ),
-
-        // نموذج الإضافة/التعديل
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 10,
-                offset: const Offset(0, -5),
-              ),
-            ],
-          ),
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.medium),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _editingIndex != null ? 'تعديل الخدمة' : 'إضافة خدمة جديدة',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.medium),
-
-                  // اسم الخدمة
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: const InputDecoration(
-                      labelText: 'اسم الخدمة',
-                      border: OutlineInputBorder(),
-                    ),
-                    validator: AppValidators.required,
-                  ),
-                  const SizedBox(height: AppSpacing.small),
-
-                  // الوصف
-                  TextFormField(
-                    controller: _descriptionController,
-                    decoration: const InputDecoration(
-                      labelText: 'الوصف',
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 2,
-                    validator: AppValidators.required,
-                  ),
-                  const SizedBox(height: AppSpacing.small),
-
-                  // السعر
-                  TextFormField(
-                    controller: _priceController,
-                    decoration: const InputDecoration(
-                      labelText: 'السعر (ريال)',
-                      border: OutlineInputBorder(),
-                    ),
-                    keyboardType:
-                        TextInputType.numberWithOptions(decimal: true),
-                    inputFormatters: [
-                      FilteringTextInputFormatter.allow(RegExp(r'^\d+\.?\d*')),
-                    ],
-                    validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return AppStrings.requiredField;
-                      }
-                      if (double.tryParse(value) == null) {
-                        return 'يرجى إدخال سعر صحيح';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.medium),
-
-                  // زر اختيار الصورة
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _pickImage,
-                      icon: const Icon(Icons.image),
-                      label: Text(
-                          _imagePath == null ? 'اختر صورة' : 'تغيير الصورة'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.grey[700],
-                        side: BorderSide(color: Colors.grey[300]!),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-
-                  // عرض الصورة المختارة
-                  if (_imagePath != null) ...[
-                    const SizedBox(height: AppSpacing.small),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.file(
-                        File(_imagePath!),
-                        height: 100,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
                     ),
                   ],
-
-                  const SizedBox(height: AppSpacing.medium),
-
-                  // أزرار الحفظ والإلغاء
-                  Row(
-                    children: [
-                      if (_editingIndex != null) ...[
-                        // زر الإلغاء
-                        Expanded(
-                          child: SizedBox(
-                            height: AppSizes.buttonHeight,
-                            child: OutlinedButton(
-                              onPressed: _clearForm,
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.grey[700],
-                                side: BorderSide(color: Colors.grey[300]!),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                              ),
-                              child: const Text('إلغاء'),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AppSpacing.small),
-                      ],
-                      // زر الحفظ
-                      Expanded(
-                        child: SizedBox(
-                          height: AppSizes.buttonHeight,
-                          child: ElevatedButton(
-                            onPressed: _isSaving ? null : _saveService,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              foregroundColor: Colors.white,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                            ),
-                            child: _isSaving
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        Colors.white,
-                                      ),
-                                    ),
-                                  )
-                                : Text(
-                                    _editingIndex != null
-                                        ? 'حفظ التعديلات'
-                                        : 'إضافة الخدمة',
-                                  ),
-                          ),
-                        ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showAddEditDialog(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 54),
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                    ],
+                    ),
+                    icon: const Icon(Icons.add_circle_outline, size: 22),
+                    label: const Text(
+                      'إضافة خدمة جديدة',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
+
+          // قائمة الخدمات
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _services.isEmpty
+                    ? _buildEmptyState()
+                    : RefreshIndicator(
+                        onRefresh: _loadServices,
+                        child: ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: _services.length,
+                          itemBuilder: (context, index) {
+                            return _buildServiceCard(_services[index], index);
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmptyState() {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(32),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                Icons.build_circle_outlined,
+                size: 80,
+                color: Colors.grey[400],
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'لا توجد خدمات',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              'ابدأ بإضافة خدماتك الأولى\nلتتمكن من استقبال الحجوزات',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 15,
+                color: Colors.grey[600],
+                height: 1.5,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildServiceCard(Service service, int index) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // صورة الخدمة
+          ClipRRect(
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+            child: service.imageUrl != null && service.imageUrl!.isNotEmpty
+                ? Image.network(
+                    service.imageUrl!,
+                    width: double.infinity,
+                    height: 180,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, trace) {
+                      return _buildPlaceholderImage();
+                    },
+                  )
+                : _buildPlaceholderImage(),
+          ),
+
+          // معلومات الخدمة
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  service.name,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  service.description,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[700],
+                    height: 1.4,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.green[50],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.green[200]!),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(width: 4),
+                          Text(
+                            '${service.price.toStringAsFixed(2)} ريال',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.green[700],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: () => _showAddEditDialog(index),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.blue[50],
+                        foregroundColor: Colors.blue[700],
+                      ),
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      onPressed: () => _deleteService(index),
+                      style: IconButton.styleFrom(
+                        backgroundColor: Colors.red[50],
+                        foregroundColor: Colors.red[700],
+                      ),
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPlaceholderImage() {
+    return Container(
+      width: double.infinity,
+      height: 180,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Colors.grey[200]!, Colors.grey[100]!],
+        ),
+      ),
+      child: Icon(
+        Icons.build_circle,
+        size: 64,
+        color: Colors.grey[400],
+      ),
+    );
+  }
+
+  Widget _buildInputField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    required IconData icon,
+    int maxLines = 1,
+    TextInputType? keyboardType,
+    List<TextInputFormatter>? inputFormatters,
+    String? Function(String?)? validator,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, size: 18, color: AppColors.primary),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        TextFormField(
+          controller: controller,
+          maxLines: maxLines,
+          keyboardType: keyboardType,
+          inputFormatters: inputFormatters,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w500,
+          ),
+          decoration: InputDecoration(
+            hintText: hint,
+            hintStyle: TextStyle(
+              color: Colors.grey[400],
+              fontWeight: FontWeight.normal,
+            ),
+            filled: true,
+            fillColor: Colors.grey[50],
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey[300]!),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppColors.primary, width: 2),
+            ),
+            errorBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: AppColors.error),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
+            ),
+          ),
+          validator: validator,
         ),
       ],
     );
