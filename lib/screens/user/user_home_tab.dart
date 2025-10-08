@@ -951,7 +951,7 @@ class _UserHomeTabState extends State<UserHomeTab>
                             points: displayPoints,
                             strokeWidth: 22,
                             color: AppColors.primary
-                                .withOpacity(0.06 + (glowValue * 0.1)),
+                                .withOpacity(0.05 + (glowValue * 0.1)),
                           ),
                         ],
                       ),
@@ -962,7 +962,7 @@ class _UserHomeTabState extends State<UserHomeTab>
                             points: displayPoints,
                             strokeWidth: 18,
                             color: AppColors.primary
-                                .withOpacity(0.12 + (glowValue * 0.15)),
+                                .withOpacity(0.2 + (glowValue * 0.15)),
                           ),
                         ],
                       ),
@@ -973,7 +973,7 @@ class _UserHomeTabState extends State<UserHomeTab>
                             points: displayPoints,
                             strokeWidth: 14,
                             color: AppColors.primary
-                                .withOpacity(0.2 + (glowValue * 0.18)),
+                                .withOpacity(0.3 + (glowValue * 0.18)),
                           ),
                         ],
                       ),
@@ -984,7 +984,7 @@ class _UserHomeTabState extends State<UserHomeTab>
                             points: displayPoints,
                             strokeWidth: 10,
                             color: AppColors.primary
-                                .withOpacity(0.3 + (glowValue * 0.22)),
+                                .withOpacity(0.4 + (glowValue * 0.4)),
                           ),
                         ],
                       ),
@@ -993,7 +993,7 @@ class _UserHomeTabState extends State<UserHomeTab>
                         polylines: [
                           Polyline(
                             points: displayPoints,
-                            strokeWidth: 7.5,
+                            strokeWidth: 2,
                             color: Colors.white,
                           ),
                         ],
@@ -1003,39 +1003,37 @@ class _UserHomeTabState extends State<UserHomeTab>
                         polylines: [
                           Polyline(
                             points: displayPoints,
-                            strokeWidth: 5.5,
+                            strokeWidth: 5,
                             gradientColors: _routeDrawn
                                 ? [
                                     Color.lerp(
                                         Colors.blue.shade700,
-                                        Colors.blue.shade500,
-                                        math.sin(colorShift * math.pi * 2))!,
+                                        const Color.fromARGB(255, 15, 1, 95),
+                                        math.sin((colorShift) * math.pi * 2))!,
                                     Color.lerp(
-                                        AppColors.primary,
-                                        Colors.blue.shade600,
-                                        math.sin((colorShift + 0.25) *
-                                            math.pi *
-                                            2))!,
-                                    Color.lerp(
-                                        Colors.blue.shade500,
-                                        AppColors.primary,
+                                        const Color.fromARGB(255, 0, 162, 255),
+                                        const Color.fromARGB(255, 15, 1, 95),
                                         math.sin(
-                                            (colorShift + 0.5) * math.pi * 2))!,
+                                            (colorShift + 0.4) * math.pi * 2))!,
+                                    Color.lerp(
+                                        const Color.fromARGB(255, 0, 140, 255),
+                                        const Color.fromARGB(255, 15, 1, 95),
+                                        math.sin(
+                                            (colorShift + 0.3) * math.pi * 2))!,
                                     Color.lerp(
                                         Colors.blue.shade600,
-                                        Colors.blue.shade700,
-                                        math.sin((colorShift + 0.75) *
-                                            math.pi *
-                                            2))!,
+                                        const Color.fromARGB(255, 6, 1, 82),
+                                        math.sin(
+                                            (colorShift + 0.2) * math.pi * 2))!,
                                     Color.lerp(
                                         Colors.blue.shade700,
-                                        Colors.blue.shade500,
-                                        math.sin(colorShift * math.pi * 2))!,
+                                        const Color.fromARGB(255, 1, 2, 82),
+                                        math.sin(
+                                            (colorShift + 0.1) * math.pi * 2))!,
                                   ]
                                 : [
-                                    Colors.blue.shade600,
-                                    AppColors.primary,
-                                    Colors.blue.shade400,
+                                    Colors.blue.shade700,
+                                    const Color.fromARGB(255, 1, 2, 82),
                                   ],
                           ),
                         ],
@@ -1059,7 +1057,7 @@ class _UserHomeTabState extends State<UserHomeTab>
                           padding: const EdgeInsets.symmetric(
                               horizontal: 8, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.blue,
+                            color: const Color.fromARGB(255, 0, 0, 0),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Text(
@@ -1069,7 +1067,7 @@ class _UserHomeTabState extends State<UserHomeTab>
                         ),
                         const SizedBox(height: 2),
                         const Icon(Icons.my_location,
-                            color: Colors.blue, size: 32),
+                            color: Color.fromARGB(255, 0, 0, 0), size: 32),
                       ],
                     ),
                   ),

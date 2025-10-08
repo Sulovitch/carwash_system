@@ -184,7 +184,7 @@ class _OwnerDashboardTabState extends State<OwnerDashboardTab>
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: [AppColors.primary, Colors.blue.shade800],
-          begin: Alignment.topLeft,
+          begin: Alignment.topCenter,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
