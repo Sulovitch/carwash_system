@@ -21,7 +21,6 @@ class UserProfileTab extends StatefulWidget {
 class _UserProfileTabState extends State<UserProfileTab>
     with SingleTickerProviderStateMixin {
   final _profileService = ProfileService();
-  bool _isLoading = false;
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
@@ -63,8 +62,6 @@ class _UserProfileTabState extends State<UserProfileTab>
   }
 
   Future<void> _updateProfile(Map<String, String> updatedProfile) async {
-    setState(() => _isLoading = true);
-
     try {
       final response = await _profileService.updateUserProfile(
         userId: updatedProfile['userId']!,
@@ -85,10 +82,6 @@ class _UserProfileTabState extends State<UserProfileTab>
     } catch (e) {
       if (!mounted) return;
       ErrorHandler.showErrorSnackBar(context, e);
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
     }
   }
 
