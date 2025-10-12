@@ -25,7 +25,6 @@ class ReceptionistScreen extends StatefulWidget {
 class _ReceptionistScreenState extends State<ReceptionistScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
-  
 
   // Reservations data
   List<Map<String, dynamic>> allReservations = [];
@@ -349,6 +348,8 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
         'userType': 'receptionist',
         'duration': widget.carWashInfo['duration']?.toString() ?? '30',
         'capacity': widget.carWashInfo['capacity']?.toString() ?? '5',
+        'bookingSource': 'walk-in',
+        'createdBy': widget.receptionist['ReceptionistID'],
       },
     ).then((result) {
       if (result != null && result is Map<String, dynamic> && mounted) {
@@ -1141,7 +1142,6 @@ class _ReceptionistScreenState extends State<ReceptionistScreen>
     final status = reservation['status'];
     final isPending = status == 'Pending';
     final isApproved = status == 'Approved';
-    
 
     final String userName =
         reservation['user_name'] ?? reservation['name'] ?? 'غير محدد';
