@@ -1,20 +1,23 @@
 // lib/widgets/availability_indicator.dart
+import 'package:flutter/material.dart';
+
 class AvailabilityIndicator extends StatelessWidget {
   final int availableSpots;
   final int totalCapacity;
-  
+
   const AvailabilityIndicator({
+    Key? key,
     required this.availableSpots,
     required this.totalCapacity,
-  });
-  
+  }) : super(key: key);
+
   @override
   Widget build(BuildContext context) {
     final percentage = availableSpots / totalCapacity;
     Color indicatorColor;
     String statusText;
     IconData statusIcon;
-    
+
     if (percentage > 0.5) {
       indicatorColor = Colors.green;
       statusText = 'متاح';
@@ -32,7 +35,7 @@ class AvailabilityIndicator extends StatelessWidget {
       statusText = 'ممتلئ';
       statusIcon = Icons.block;
     }
-    
+
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(

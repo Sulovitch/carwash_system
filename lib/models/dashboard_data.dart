@@ -1,3 +1,5 @@
+import 'package:app/models/time_slot.dart';
+
 class DashboardData {
   final int todayBookings;
   final int activeBookings;

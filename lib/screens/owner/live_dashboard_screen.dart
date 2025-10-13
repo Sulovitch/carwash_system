@@ -1,371 +1,580 @@
 // lib/screens/owner/live_dashboard_screen.dart
+import 'package:flutter/material.dart';
+import 'dart:async';
+import '../../widgets/availability_indicator.dart';
+import '../../widgets/booking_sources_chart.dart';
+import '../../services/dashboard_service.dart';
+import '../../models/dashboard_data.dart';
+
 class LiveDashboardScreen extends StatefulWidget {
   final String carWashId;
 
+  const LiveDashboardScreen({
+    Key? key,
+    required this.carWashId,
+  }) : super(key: key);
+
   @override
-  _LiveDashboardScreenState createState() => _LiveDashboardScreenState();
+  State<LiveDashboardScreen> createState() => _LiveDashboardScreenState();
 }
 
 class _LiveDashboardScreenState extends State<LiveDashboardScreen> {
-  late WebSocketService _wsService;
-  late Stream<Map<String, dynamic>> _availabilityStream;
-
-  Map<String, dynamic> _currentStats = {
-    'totalToday': 0,
-    'completedToday': 0,
-    'inProgress': 0,
-    'upcoming': 0,
-    'walkIns': 0,
-    'appBookings': 0,
-  };
+  final DashboardService _dashboardService = DashboardService();
+  DashboardData? _dashboardData;
+  bool _isLoading = true;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
-    _wsService = WebSocketService();
-    _wsService.connect(widget.carWashId);
-    _availabilityStream = _wsService.availabilityStream;
-    _loadTodayStats();
+    _loadDashboardData();
+    // تحديث تلقائي كل 30 ثانية
+    _refreshTimer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _loadDashboardData(silent: true),
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _loadDashboardData({bool silent = false}) async {
+    if (!silent) {
+      setState(() => _isLoading = true);
+    }
+
+    try {
+      final data = await _dashboardService.getDashboardData(
+        carWashId: widget.carWashId,
+      );
+
+      if (mounted) {
+        setState(() {
+          _dashboardData = data;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+        if (!silent) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('خطأ في تحميل البيانات: ${e.toString()}'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('المراقبة المباشرة'),
+        title: Row(
+          children: [
+            const Text('لوحة التحكم المباشرة'),
+            const SizedBox(width: 8),
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                color: Colors.green,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.green.withOpacity(0.5),
+                    blurRadius: 4,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: const Color(0xFF370175),
         actions: [
-          StreamBuilder<Map<String, dynamic>>(
-            stream: _availabilityStream,
-            builder: (context, snapshot) {
-              return Container(
-                padding: const EdgeInsets.all(8),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        color: snapshot.hasData ? Colors.green : Colors.red,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      snapshot.hasData ? 'متصل' : 'غير متصل',
-                      style: const TextStyle(fontSize: 12),
-                    ),
-                  ],
-                ),
-              );
-            },
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () => _loadDashboardData(),
+            tooltip: 'تحديث',
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _loadTodayStats,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            children: [
-              // الإحصائيات الحية
-              _buildLiveStatsGrid(),
-              const SizedBox(height: 20),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _dashboardData == null
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.error_outline,
+                          size: 64, color: Colors.grey[400]),
+                      const SizedBox(height: 16),
+                      Text(
+                        'لا توجد بيانات للعرض',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      ElevatedButton.icon(
+                        onPressed: () => _loadDashboardData(),
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('إعادة المحاولة'),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: () => _loadDashboardData(),
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // وقت آخر تحديث
+                        _buildLastUpdateTime(),
 
-              // الجدول الزمني الحي
-              _buildLiveTimeline(),
-              const SizedBox(height: 20),
+                        const SizedBox(height: 16),
 
-              // آخر الأنشطة
-              _buildRecentActivities(),
-              const SizedBox(height: 20),
+                        // إحصائيات سريعة
+                        _buildQuickStats(),
 
-              // رسم بياني للنشاط خلال اليوم
-              _buildHourlyActivityChart(),
-            ],
+                        const SizedBox(height: 16),
+
+                        // مؤشر التوفر الحالي
+                        _buildAvailabilitySection(),
+
+                        const SizedBox(height: 16),
+
+                        // مخطط مصادر الحجوزات
+                        BookingSourcesChart(
+                          bookingSources: _dashboardData!.bookingSources,
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // الحجوزات الأخيرة
+                        _buildRecentBookings(),
+
+                        const SizedBox(height: 16),
+
+                        // الفترات الحرجة
+                        _buildCriticalSlots(),
+                      ],
+                    ),
+                  ),
+                ),
+    );
+  }
+
+  Widget _buildLastUpdateTime() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.grey[100],
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
+          const SizedBox(width: 8),
+          Text(
+            'آخر تحديث: ${_formatTime(DateTime.now())}',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickStats() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'إحصائيات اليوم',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    icon: Icons.event_available,
+                    title: 'حجوزات اليوم',
+                    value: _dashboardData!.todayBookings.toString(),
+                    color: Colors.blue,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildStatCard(
+                    icon: Icons.trending_up,
+                    title: 'قيد التنفيذ',
+                    value: _dashboardData!.activeBookings.toString(),
+                    color: Colors.orange,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildStatCard(
+                    icon: Icons.check_circle,
+                    title: 'مكتملة',
+                    value: _dashboardData!.completedBookings.toString(),
+                    color: Colors.green,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildStatCard(
+                    icon: Icons.monetization_on,
+                    title: 'الإيرادات',
+                    value:
+                        '${_dashboardData!.todayRevenue.toStringAsFixed(0)} ر.س',
+                    color: Colors.purple,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildLiveStatsGrid() {
-    return GridView.count(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      crossAxisCount: 2,
-      childAspectRatio: 1.5,
-      crossAxisSpacing: 12,
-      mainAxisSpacing: 12,
-      children: [
-        _buildStatCard(
-          'الحجوزات اليوم',
-          '${_currentStats['totalToday']}',
-          Icons.today,
-          Colors.blue,
-          subtitle:
-              'التطبيق: ${_currentStats['appBookings']} | مباشر: ${_currentStats['walkIns']}',
-        ),
-        _buildStatCard(
-          'قيد التنفيذ',
-          '${_currentStats['inProgress']}',
-          Icons.timelapse,
-          Colors.orange,
-          isLive: true,
-        ),
-        _buildStatCard(
-          'مكتملة',
-          '${_currentStats['completedToday']}',
-          Icons.done_all,
-          Colors.green,
-        ),
-        _buildStatCard(
-          'قادمة',
-          '${_currentStats['upcoming']}',
-          Icons.schedule,
-          Colors.purple,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLiveTimeline() {
-    return StreamBuilder<Map<String, dynamic>>(
-      stream: _availabilityStream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        final slots = snapshot.data!['slots'] as List;
-        final currentTime = TimeOfDay.now();
-
-        return Card(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  children: [
-                    const Icon(Icons.timeline, color: Colors.blue),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'الجدول الزمني اليوم',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      TimeOfDay.now().format(context),
-                      style: TextStyle(
-                        color: Colors.grey[600],
-                        fontSize: 14,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              SizedBox(
-                height: 100,
-                child: ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: slots.length,
-                  itemBuilder: (context, index) {
-                    final slot = slots[index];
-                    final time = TimeOfDay(
-                      hour: int.parse(slot['time'].split(':')[0]),
-                      minute: int.parse(slot['time'].split(':')[1]),
-                    );
-                    final isPast = _isTimePast(time, currentTime);
-                    final isCurrent = _isCurrentTime(time, currentTime);
-
-                    return Container(
-                      width: 80,
-                      margin: const EdgeInsets.only(right: 8, bottom: 16),
-                      child: Column(
-                        children: [
-                          Text(
-                            slot['time'],
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: isCurrent ? FontWeight.bold : null,
-                              color: isPast ? Colors.grey : Colors.black,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                color: _getSlotStatusColor(
-                                  slot['booked_count'],
-                                  slot['capacity'],
-                                  isPast,
-                                  isCurrent,
-                                ),
-                                borderRadius: BorderRadius.circular(8),
-                                border: isCurrent
-                                    ? Border.all(color: Colors.blue, width: 2)
-                                    : null,
-                              ),
-                              child: Center(
-                                child: Text(
-                                  '${slot['booked_count']}/${slot['capacity']}',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: isPast ? 11 : 13,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildStatCard(
-    String label,
-    String value,
-    IconData icon,
-    Color color, {
-    String? subtitle,
-    bool isLive = false,
+  Widget _buildStatCard({
+    required IconData icon,
+    required String title,
+    required String value,
+    required Color color,
   }) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border:
-            isLive ? Border.all(color: color.withOpacity(0.5), width: 2) : null,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 20),
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey[600],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAvailabilitySection() {
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'التوفر الحالي',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
-              if (isLive)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
+            ),
+            const SizedBox(height: 16),
+            AvailabilityIndicator(
+              availableSpots: _dashboardData!.availableSpots,
+              totalCapacity: _dashboardData!.totalCapacity,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecentBookings() {
+    if (_dashboardData!.recentBookings.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'الحجوزات الأخيرة',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
                   ),
-                  decoration: BoxDecoration(
-                    color: color.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
+                ),
+                TextButton(
+                  onPressed: () {
+                    // الانتقال لصفحة كل الحجوزات
+                  },
+                  child: const Text('عرض الكل'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _dashboardData!.recentBookings.length,
+              separatorBuilder: (context, index) => const Divider(),
+              itemBuilder: (context, index) {
+                final booking = _dashboardData!.recentBookings[index];
+                return ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: _getBookingStatusColor(booking.status),
+                    child: Icon(
+                      _getBookingStatusIcon(booking.status),
+                      color: Colors.white,
+                      size: 20,
+                    ),
                   ),
-                  child: Row(
+                  title: Text(
+                    booking.customerName,
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    '${booking.serviceName} - ${booking.time}',
+                    style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  ),
+                  trailing: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          color: color,
-                          shape: BoxShape.circle,
+                      Text(
+                        booking.source,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.grey[600],
                         ),
                       ),
-                      const SizedBox(width: 4),
-                      Text(
-                        'LIVE',
-                        style: TextStyle(
-                          fontSize: 10,
-                          color: color,
-                          fontWeight: FontWeight.bold,
+                      const SizedBox(height: 4),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getBookingStatusColor(booking.status)
+                              .withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          _getBookingStatusText(booking.status),
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: _getBookingStatusColor(booking.status),
+                          ),
                         ),
                       ),
                     ],
                   ),
-                ),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                  color: color,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                ),
-              ),
-              if (subtitle != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.grey[500],
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ],
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  bool _isTimePast(TimeOfDay time, TimeOfDay current) {
-    return time.hour < current.hour ||
-        (time.hour == current.hour && time.minute < current.minute);
+  Widget _buildCriticalSlots() {
+    if (_dashboardData!.criticalSlots.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Card(
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.warning_amber, color: Colors.orange, size: 24),
+                const SizedBox(width: 8),
+                const Text(
+                  'فترات تحتاج انتباه',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _dashboardData!.criticalSlots.length,
+              separatorBuilder: (context, index) => const SizedBox(height: 8),
+              itemBuilder: (context, index) {
+                final slot = _dashboardData!.criticalSlots[index];
+                final percentage = slot.bookedCount / slot.capacity;
+
+                return Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: _getCriticalSlotColor(percentage).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: _getCriticalSlotColor(percentage).withOpacity(0.3),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.access_time,
+                        color: _getCriticalSlotColor(percentage),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              slot.time,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${slot.bookedCount}/${slot.capacity} محجوز',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      CircleAvatar(
+                        backgroundColor: _getCriticalSlotColor(percentage),
+                        child: Text(
+                          '${(percentage * 100).toInt()}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
-  bool _isCurrentTime(TimeOfDay time, TimeOfDay current) {
-    return time.hour == current.hour &&
-        (time.minute <= current.minute && current.minute < time.minute + 30);
+  Color _getBookingStatusColor(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return Colors.orange;
+      case 'in_progress':
+        return Colors.blue;
+      case 'completed':
+        return Colors.green;
+      case 'cancelled':
+        return Colors.red;
+      default:
+        return Colors.grey;
+    }
   }
 
-  Color _getSlotStatusColor(
-    int booked,
-    int capacity,
-    bool isPast,
-    bool isCurrent,
-  ) {
-    if (isPast) return Colors.grey;
-    if (isCurrent) return Colors.blue;
+  IconData _getBookingStatusIcon(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return Icons.schedule;
+      case 'in_progress':
+        return Icons.autorenew;
+      case 'completed':
+        return Icons.check_circle;
+      case 'cancelled':
+        return Icons.cancel;
+      default:
+        return Icons.help;
+    }
+  }
 
-    final percentage = booked / capacity;
+  String _getBookingStatusText(String status) {
+    switch (status.toLowerCase()) {
+      case 'pending':
+        return 'قيد الانتظار';
+      case 'in_progress':
+        return 'جاري العمل';
+      case 'completed':
+        return 'مكتمل';
+      case 'cancelled':
+        return 'ملغي';
+      default:
+        return status;
+    }
+  }
+
+  Color _getCriticalSlotColor(double percentage) {
     if (percentage >= 1.0) return Colors.red;
     if (percentage >= 0.8) return Colors.orange;
-    if (percentage >= 0.5) return Colors.yellow[700]!;
-    return Colors.green;
+    return Colors.yellow[700]!;
+  }
+
+  String _formatTime(DateTime dateTime) {
+    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 }

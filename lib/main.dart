@@ -8,11 +8,17 @@ import 'screens/Reservation_screen.dart';
 import 'screens/CarInput_screen.dart';
 import 'screens/owner/monthly_subscription_screen.dart';
 import 'config/app_constants.dart';
+import 'package:flutter/material.dart';
+import 'services/notification_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // طلب أذونات الإشعارات (Android 13+)
+  await NotificationService.requestPermissions();
 
-  // Ù‚ÙÙ„ Ø§Ù„ØªØ·Ø¨ÙŠÙ‚ Ø¹Ù„Ù‰ Ø§Ù„ÙˆØ¶Ø¹ Ø§Ù„Ø¹Ù…ÙˆØ¯ÙŠ ÙÙ‚Ø·
+  // تهيئة الإشعارات
+  await NotificationService.initialize();
+
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
