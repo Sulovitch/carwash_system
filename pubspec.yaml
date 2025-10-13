@@ -45,6 +45,9 @@ dependencies:
   
   # Database (optional)
   mysql1: ^0.20.0
+  flutter_local_notifications: ^19.4.2
+  web_socket_channel: ^3.0.3
+  table_calendar: ^3.0.9
   
 
 dev_dependencies:

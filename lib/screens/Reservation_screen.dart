@@ -1,3 +1,4 @@
+import 'package:app/services/availability_service.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
@@ -204,32 +205,58 @@ class _ReservationScreenState extends State<ReservationScreen> {
     return slots;
   }
 
-  Future<void> _submitReservation() async {
-    if (_isDoubleClick() || _isSubmitting) return;
+Future<void> _submitReservation() async {
+  if (_isDoubleClick() || _isSubmitting) return;
 
-    if (_selectedService == null) {
-      ErrorHandler.showErrorSnackBar(context, 'يرجى اختيار الخدمة');
+  if (_selectedService == null) {
+    ErrorHandler.showErrorSnackBar(context, 'يرجى اختيار الخدمة');
+    return;
+  }
+
+  if (_selectedDate == null) {
+    ErrorHandler.showErrorSnackBar(context, 'يرجى اختيار التاريخ');
+    return;
+  }
+
+  if (_selectedTime == null) {
+    ErrorHandler.showErrorSnackBar(context, 'يرجى اختيار الوقت');
+    return;
+  }
+
+  // تنسيق التاريخ والوقت
+  final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate!);
+  final formattedTime =
+      '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
+
+  // جلب نوع المستخدم من الـ arguments
+  final args =
+      ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+  final userType = args?['userType'] ?? 'user';
+
+  final availabilityService = AvailabilityService();
+
+  try {
+    // 🟡 1. التحقق الفوري من التوفر
+    final availability = await availabilityService.checkAvailability(
+      carWashId: widget.carWashId.toString(),
+      date: formattedDate,
+      time: formattedTime,
+    );
+
+    if (availability.available == false) {
+      ErrorHandler.showErrorSnackBar(
+        context,
+        availability.message ??
+            'عذراً، هذا الوقت لم يعد متاحًا. يرجى اختيار وقت آخر.',
+      );
+      setState(() {
+        _selectedTime = null;
+      });
       return;
     }
 
-    if (_selectedDate == null) {
-      ErrorHandler.showErrorSnackBar(context, 'يرجى اختيار التاريخ');
-      return;
-    }
-
-    if (_selectedTime == null) {
-      ErrorHandler.showErrorSnackBar(context, 'يرجى اختيار الوقت');
-      return;
-    }
-
-    // التحقق من نوع المستخدم
-    final args =
-        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    final userType = args?['userType'] ?? 'user';
-
-    // تخطي الدفع إذا كان موظف الاستقبال
+    // 🟢 2. التحقق من الدفع (إذا لم يكن المستخدم موظف استقبال)
     if (userType != 'receptionist') {
-      // الانتقال لشاشة الدفع للمستخدم العادي فقط
       final paymentSuccess = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
@@ -244,74 +271,62 @@ class _ReservationScreenState extends State<ReservationScreen> {
 
     setState(() => _isSubmitting = true);
 
-    try {
-      final formattedDate = DateFormat('yyyy-MM-dd').format(_selectedDate!);
-      final formattedTime =
-          '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
+    // 🟢 3. تنفيذ عملية الحجز
+    final reservationResponse = await availabilityService.reserveSlot(
+      carWashId: widget.carWashId.toString(),
+      date: formattedDate,
+      time: formattedTime,
+      userId: _userId,
+      carId: _selectedCar['car_id'].toString(),
+      serviceId: _selectedService!.id.toString(),
+      bookingSource: userType == 'receptionist' ? 'reception' : 'app',
+      createdBy: userType == 'receptionist' ? _userName : null,
+    );
 
-      final response = await _reservationService
-          .saveReservation(
-        userId: _userId,
-        carId: _selectedCar['car_id']?.toString() ?? '',
-        serviceId: _selectedService!.id.toString(),
-        date: formattedDate,
-        time: formattedTime,
-      )
-          .timeout(
-        const Duration(seconds: 15),
-        onTimeout: () {
-          throw Exception('انتهت مهلة الاتصال');
-        },
-      );
+    if (!mounted) return;
 
-      if (!mounted) return;
+    // 🟢 4. التحقق من نجاح عملية الحجز
+    if (reservationResponse.success) {
+      ErrorHandler.showSuccessSnackBar(context, 'تم تأكيد الحجز بنجاح');
 
-      if (response.success) {
-        ErrorHandler.showSuccessSnackBar(context, 'تم تأكيد الحجز بنجاح');
+      final int reservationId = DateTime.now().millisecondsSinceEpoch;
 
-        // توليد معرف الحجز
-        final int reservationId = DateTime.now().millisecondsSinceEpoch;
+      final reservationData = {
+        'user_id': _userId,
+        'car_id': _selectedCar['car_id'],
+        'service_id': _selectedService!.id,
+        'service_name': _selectedService!.name,
+        'car_make': _selectedCar['make'],
+        'car_model': _selectedCar['model'],
+        'car_year': _selectedCar['year'],
+        'date': formattedDate,
+        'time': formattedTime,
+        'status': 'Pending',
+        'reservation_id': reservationId,
+        'user_name': _userName,
+        'user_phone': _userPhone,
+      };
 
-        final reservationData = {
-          'user_id': _userId,
-          'car_id': _selectedCar['car_id'],
-          'service_id': _selectedService!.id,
-          'service_name': _selectedService!.name,
-          'car_make': _selectedCar['make'],
-          'car_model': _selectedCar['model'],
-          'car_year': _selectedCar['year'],
-          'date': formattedDate,
-          'time': formattedTime,
-          'status': 'Pending',
-          'reservation_id': reservationId,
-          // إضافة معلومات العميل
-          'user_name': _userName,
-          'user_phone': _userPhone,
-          'name': _userName,
-          'phone': _userPhone,
-        };
-
-        if (mounted) {
-          Navigator.pop(context, reservationData);
-        }
-      } else {
-        ErrorHandler.showErrorSnackBar(
-          context,
-          response.message ?? 'فشل تأكيد الحجز',
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
+      Navigator.pop(context, reservationData);
+    } else {
       ErrorHandler.showErrorSnackBar(
         context,
-        'خطأ في تأكيد الحجز: ${e.toString()}',
+        reservationResponse.message ?? 'فشل تأكيد الحجز',
       );
-    } finally {
-      if (mounted) {
-        setState(() => _isSubmitting = false);
-      }
+    }
+  } catch (e) {
+    ErrorHandler.showErrorSnackBar(
+      context,
+      'حدث خطأ أثناء تأكيد الحجز: ${e.toString()}',
+    );
+  } finally {
+    if (mounted) {
+      setState(() => _isSubmitting = false);
     }
   }
+}
+
+
 
   @override
   Widget build(BuildContext context) {
