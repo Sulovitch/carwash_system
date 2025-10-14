@@ -6,24 +6,23 @@ plugins {
 
 android {
     namespace = "com.ReservationMS.app"
-    compileSdk = 34
-    ndkVersion = flutter.ndkVersion
+    compileSdk = flutter.compileSdkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
         isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = "17"
+        jvmTarget = "11"
     }
 
     defaultConfig {
-        // ضع معرف التطبيق الخاص بك هنا
         applicationId = "com.ReservationMS.app"
-        minSdk = 21
-        targetSdk = 34
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
@@ -31,7 +30,6 @@ android {
 
     buildTypes {
         release {
-            // مؤقتًا استخدم توقيع debug لتجربة البناء
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -42,9 +40,5 @@ flutter {
 }
 
 dependencies {
-    // مكتبة desugaring لحل مشكلة flutter_local_notifications
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
-
-    // مكتبة Kotlin القياسية
-    implementation("org.jetbrains.kotlin:kotlin-stdlib:1.9.24")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }
