@@ -49,6 +49,7 @@ dependencies:
   web_socket_channel: ^3.0.3
   table_calendar: ^3.0.9
   shared_preferences: ^2.5.3
+  dartz: ^0.10.1
   
 
 dev_dependencies:
