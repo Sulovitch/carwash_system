@@ -2,12 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../services/service_service.dart';
-import '../services/reservation_service.dart';
-import '../services/availability_service.dart';
-import '../utils/error_handler.dart';
-import '../config/app_constants.dart';
-import '../models/Service.dart';
+import '../../data/services/service_service.dart';
+import '../../data/services/reservation_service.dart';
+import '../../data/services/availability_service.dart';
+import '../../core/utils/error_handler.dart';
+import '../../core/constants/app_constants.dart';
+import '../../data/models/Service.dart';
 import 'PaymentScreen.dart';
 
 class ReservationScreen extends StatefulWidget {

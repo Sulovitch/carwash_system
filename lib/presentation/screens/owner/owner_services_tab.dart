@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import '../../services/service_service.dart';
-import '../../utils/error_handler.dart';
-import '../../config/app_constants.dart';
-import '../../models/Service.dart';
+import '../../../data/services/service_service.dart';
+import '../../../core/utils/error_handler.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../data/models/Service.dart';
 
 class OwnerServicesTab extends StatefulWidget {
   final String carWashId;

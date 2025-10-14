@@ -1,8 +1,8 @@
 // lib/screens/owner/capacity_management_screen.dart
 import 'package:flutter/material.dart';
 import 'package:table_calendar/table_calendar.dart';
-import '../../models/time_slot.dart';
-import '../../services/capacity_service.dart';
+import '../../../data/models/time_slot.dart';
+import '../../../data/services/capacity_service.dart';
 
 class CapacityManagementScreen extends StatefulWidget {
   final String carWashId;

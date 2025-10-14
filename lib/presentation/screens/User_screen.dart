@@ -1,10 +1,10 @@
-import 'package:app/screens/welcome_screen.dart';
+import 'package:app/presentation/screens/welcome_screen.dart';
 import 'package:flutter/material.dart';
 import 'user/user_home_tab.dart';
 import 'user/user_profile_tab.dart';
 import 'user/user_reservations_tab.dart';
 import 'user/user_cars_tab.dart';
-import '../config/app_constants.dart';
+import '../../core/constants/app_constants.dart';
 
 class UserScreen extends StatefulWidget {
   static const String routeName = 'userScreen';

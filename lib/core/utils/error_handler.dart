@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
-import '../config/app_constants.dart';
+import '../constants/app_constants.dart';
 
 class ErrorHandler {
   static String getErrorMessage(dynamic error) {

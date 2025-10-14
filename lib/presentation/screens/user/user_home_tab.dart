@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'dart:math' as math;
-import '../../services/carwash_service.dart';
-import '../../services/car_service.dart';
-import '../../utils/error_handler.dart';
-import '../../config/app_constants.dart';
-import '../../models/Car.dart';
+import '../../../data/services/carwash_service.dart';
+import '../../../data/services/car_service.dart';
+import '../../../core/utils/error_handler.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../data/models/Car.dart';
 import '../Reservation_screen.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';

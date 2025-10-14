@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../services/car_service.dart';
-import '../../utils/error_handler.dart';
-import '../../config/app_constants.dart';
-import '../../models/Car.dart';
+import '../../../data/services/car_service.dart';
+import '../../../core/utils/error_handler.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../data/models/Car.dart';
 import '../CarInput_screen.dart';
 
 class UserCarsTab extends StatefulWidget {

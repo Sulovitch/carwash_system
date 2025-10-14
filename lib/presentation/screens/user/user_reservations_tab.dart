@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../services/reservation_service.dart';
-import '../../services/carwash_service.dart';
-import '../../utils/error_handler.dart';
-import '../../config/app_constants.dart';
+import '../../../data/services/reservation_service.dart';
+import '../../../data/services/carwash_service.dart';
+import '../../../core/utils/error_handler.dart';
+import '../../../core/constants/app_constants.dart';
 
 class UserReservationsTab extends StatefulWidget {
   final String userId;

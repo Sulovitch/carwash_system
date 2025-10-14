@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:intl/intl.dart';
-import '../../config/app_constants.dart';
-import '../../services/transaction_service.dart';
-import '../../utils/error_handler.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../data/services/transaction_service.dart';
+import '../../../core/utils/error_handler.dart';
 
 class OwnerAnalyticsTab extends StatefulWidget {
   final String carWashId;

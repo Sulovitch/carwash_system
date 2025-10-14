@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-import '../services/carwash_service.dart';
-import '../utils/error_handler.dart';
-import '../config/app_constants.dart';
+import '../../data/services/carwash_service.dart';
+import '../../core/utils/error_handler.dart';
+import '../../core/constants/app_constants.dart';
 import 'Owner_screen.dart';
 
 class CarWashScreen extends StatefulWidget {

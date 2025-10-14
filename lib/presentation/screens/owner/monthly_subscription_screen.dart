@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../config/app_constants.dart';
-import '../../utils/error_handler.dart';
+import '../../../core/constants/app_constants.dart';
+import '../../../core/utils/error_handler.dart';
 
 class SubscriptionPlan {
   final String name;
@@ -106,7 +106,8 @@ class _SubscriptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final borderColor = plan.isRecommended ? AppColors.primary : Colors.grey.shade300;
+    final borderColor =
+        plan.isRecommended ? AppColors.primary : Colors.grey.shade300;
     final titleStyle = TextStyle(
       fontSize: 20,
       fontWeight: FontWeight.bold,
@@ -118,7 +119,9 @@ class _SubscriptionCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(AppSizes.cardBorderRadius),
         side: BorderSide(color: borderColor, width: plan.isRecommended ? 2 : 1),
       ),
-      elevation: plan.isRecommended ? AppSizes.cardElevation + 2 : AppSizes.cardElevation,
+      elevation: plan.isRecommended
+          ? AppSizes.cardElevation + 2
+          : AppSizes.cardElevation,
       child: Padding(
         padding: const EdgeInsets.all(AppSpacing.large),
         child: Column(
@@ -152,7 +155,8 @@ class _SubscriptionCard extends StatelessWidget {
                     ),
                     decoration: BoxDecoration(
                       color: AppColors.primary,
-                      borderRadius: BorderRadius.circular(AppSizes.borderRadius),
+                      borderRadius:
+                          BorderRadius.circular(AppSizes.borderRadius),
                     ),
                     child: const Text(
                       'الأكثر طلبًا',

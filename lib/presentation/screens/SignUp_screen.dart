@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../config/app_constants.dart';
-import '../utils/error_handler.dart';
-import '../services/auth_service.dart';
+import '../../core/constants/app_constants.dart';
+import '../../core/utils/error_handler.dart';
+import '../../data/services/auth_service.dart';
 import 'CarWash_screen.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -216,8 +216,8 @@ class _SignupScreenState extends State<SignupScreen>
                       label: 'تأكيد كلمة المرور',
                       hint: 'أعد إدخال كلمة المرور',
                       obscureText: _obscureConfirmPassword,
-                      onToggle: () => setState(
-                          () => _obscureConfirmPassword = !_obscureConfirmPassword),
+                      onToggle: () => setState(() =>
+                          _obscureConfirmPassword = !_obscureConfirmPassword),
                       validator: (value) {
                         if (value == null || value.isEmpty) {
                           return AppStrings.requiredField;

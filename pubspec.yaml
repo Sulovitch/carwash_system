@@ -50,6 +50,7 @@ dependencies:
   table_calendar: ^3.0.9
   shared_preferences: ^2.5.3
   dartz: ^0.10.1
+  provider: ^6.1.5+1
   
 
 dev_dependencies:

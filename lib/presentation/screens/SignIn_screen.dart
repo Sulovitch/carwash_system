@@ -1,11 +1,12 @@
+import 'package:app/presentation/providers/auth_provider.dart';
 import 'package:flutter/material.dart';
-import '../services/auth_service.dart';
-import '../utils/error_handler.dart';
-import '../config/app_constants.dart';
+import '../../core/utils/error_handler.dart';
+import '../../core/constants/app_constants.dart';
 import 'Owner_screen.dart';
 import 'User_screen.dart';
 import 'Receptionist_screen.dart';
 import 'CarWash_screen.dart';
+import 'package:provider/provider.dart';
 
 class SigninScreen extends StatefulWidget {
   static const String routeName = 'signinScreen';
@@ -19,7 +20,6 @@ class _SigninScreenState extends State<SigninScreen> {
   final _formKey = GlobalKey<FormState>();
   final _loginController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _authService = AuthService();
 
   String _userType = 'user';
   bool _isLoading = false;
@@ -33,12 +33,13 @@ class _SigninScreenState extends State<SigninScreen> {
   }
 
   Future<void> _signIn() async {
+    final authProvider = context.read<AuthProvider>();
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      final response = await _authService.signIn(
+      final success = await authProvider.signIn(
         login: _loginController.text.trim(),
         password: _passwordController.text,
         userType: _userType,
@@ -46,21 +47,19 @@ class _SigninScreenState extends State<SigninScreen> {
 
       if (!mounted) return;
 
-      if (response.success && response.data != null) {
-        _navigateBasedOnUserType(response.data!);
+      if (success && authProvider.userData != null) {
+        _navigateBasedOnUserType(authProvider.userData!);
       } else {
         ErrorHandler.showErrorSnackBar(
           context,
-          response.message ?? 'فشل تسجيل الدخول',
+          authProvider.errorMessage ?? 'فشل تسجيل الدخول',
         );
       }
     } catch (e) {
       if (!mounted) return;
-      ErrorHandler.showErrorSnackBar(context, e);
+      ErrorHandler.showErrorSnackBar(context, e.toString());
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 

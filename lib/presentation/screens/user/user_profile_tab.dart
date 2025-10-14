@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../services/profile_service.dart';
-import '../../utils/error_handler.dart';
-import '../../config/app_constants.dart';
+import '../../../data/services/profile_service.dart';
+import '../../../core/utils/error_handler.dart';
+import '../../../core/constants/app_constants.dart';
 import '../ProfileEdit_screen.dart';
 
 class UserProfileTab extends StatefulWidget {

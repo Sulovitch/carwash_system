@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../config/app_constants.dart';
+import '../../core/constants/app_constants.dart';
 
 class ProfileEditScreen extends StatefulWidget {
   static const String routeName = 'ProfileEdit_screen';

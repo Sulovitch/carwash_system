@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../widgets/availability_indicator.dart';
 import '../../widgets/booking_sources_chart.dart';
-import '../../services/dashboard_service.dart';
-import '../../models/dashboard_data.dart';
+import '../../../data/services/dashboard_service.dart';
+import '../../../data/models/dashboard_data.dart';
 
 class LiveDashboardScreen extends StatefulWidget {
   final String carWashId;

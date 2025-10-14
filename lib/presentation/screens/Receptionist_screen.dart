@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
-import '../models/Car.dart';
+import '../../data/models/Car.dart';
 import 'Reservation_screen.dart';
 import 'CarInput_screen.dart';
 import 'dart:convert';

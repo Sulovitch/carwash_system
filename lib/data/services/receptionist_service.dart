@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import '../config/api_config.dart';
+import '../../core/config/api_config.dart';
 import '../models/api_response.dart';
 
 class ReceptionistService {

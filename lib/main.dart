@@ -1,14 +1,16 @@
-﻿import 'package:app/screens/Owner_screen.dart';
+﻿import 'package:app/presentation/screens/Owner_screen.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'screens/welcome_screen.dart';
-import 'screens/SignIn_screen.dart';
-import 'screens/SignUp_screen.dart';
-import 'screens/Reservation_screen.dart';
-import 'screens/CarInput_screen.dart';
-import 'screens/owner/monthly_subscription_screen.dart';
-import 'config/app_constants.dart';
-import 'services/notification_service.dart';
+import 'presentation/screens/welcome_screen.dart';
+import 'presentation/screens/SignIn_screen.dart';
+import 'presentation/screens/SignUp_screen.dart';
+import 'presentation/screens/Reservation_screen.dart';
+import 'presentation/screens/CarInput_screen.dart';
+import 'presentation/screens/owner/monthly_subscription_screen.dart';
+import 'core/constants/app_constants.dart';
+import 'data/services/notification_service.dart';
+import 'package:provider/provider.dart';
+import 'presentation/providers/auth_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,7 +25,15 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => AuthProvider()),
+        // سنضيف المزيد من Providers هنا
+      ],
+      child: const MyApp(),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {

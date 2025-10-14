@@ -1,4 +1,4 @@
-import 'package:app/models/time_slot.dart';
+import 'package:app/data/models/time_slot.dart';
 
 class DashboardData {
   final int todayBookings;

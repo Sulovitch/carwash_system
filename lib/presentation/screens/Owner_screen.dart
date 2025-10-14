@@ -1,11 +1,11 @@
-import 'package:app/screens/welcome_screen.dart';
+import 'package:app/presentation/screens/welcome_screen.dart';
 import 'package:flutter/material.dart';
 import 'owner/owner_services_tab.dart';
 import 'owner/owner_receptionists_tab.dart';
 import 'owner/owner_profile_tab.dart';
 import 'owner/owner_dashboard_tab.dart';
 import 'owner/owner_analytics_tab.dart';
-import '../config/app_constants.dart';
+import '../../core/constants/app_constants.dart';
 
 class OwnerScreen extends StatefulWidget {
   static const String routeName = 'ownerScreen';

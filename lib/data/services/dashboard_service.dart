@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:app/models/time_slot.dart';
+import 'package:app/data/models/time_slot.dart';
 import 'package:http/http.dart' as http;
 import '../models/dashboard_data.dart';
 
