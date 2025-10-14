@@ -1,4 +1,5 @@
-package com.example.app
+
+package com.ReservationMS.app
 
 import io.flutter.embedding.android.FlutterActivity
 
